@@ -1,0 +1,29 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <!-- launches the state estimation nodes -->
+  <!-- PARAMS -->
+  <arg name="config_dir" default="$(find stack_master)/config/NUC1/SE/slam" />
+  <arg name="config_base" default="odometry.lua" />
+  <arg name="scan_topic" default="scan" />
+  <arg name="imu_topic" default="imu/data" />
+  <arg name="odom_topic" default="odom" />
+
+
+  <node name="cartographer_node" pkg="cartographer_ros"
+    type="cartographer_node"
+    args="
+    -configuration_directory $(arg config_dir)
+    -configuration_basename $(arg config_base)" 
+    output="screen">
+    <remap from="scan" to="$(arg scan_topic)" />
+    <remap from="odom" to="$(arg odom_topic)" />
+    <remap from="imu" to="$(arg imu_topic)" />
+  </node>
+
+  <!-- Keep this here to evaluate map shift -->
+  <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+    type="cartographer_occupancy_grid_node" args="-resolution 0.05">
+    <remap from="/map" to="/map_new" />
+  </node>
+
+</launch>

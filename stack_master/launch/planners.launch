@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="planners" default="global_tracking"/>
+
+    <node pkg="state_machine" type="dynamic_planners_server.py" name="$(arg planners)" output="screen">
+        <param name="planners_name" value="$(arg planners)" />
+    </node>
+</launch>

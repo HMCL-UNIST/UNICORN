@@ -1,0 +1,10 @@
+free_scaling_reference_distance_m: 1
+is_closed: true
+lateral_width_m: 0.15
+latest_threshold: 0.1
+max_horizon: 20.0
+min_horizon: 0.0
+on_spline_front_horizon_thres_m: 0.5
+on_spline_min_dist_thres_m: 0.5
+hyst_timer_sec: 4.0
+killing_timer_sec: 10.0

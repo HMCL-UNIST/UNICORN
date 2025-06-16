@@ -1,0 +1,16 @@
+<!-- -*- mode: XML -*- -->
+<launch>  
+  <arg name="map"/>
+  <param name="map" value="$(arg map)" />
+
+  <include file="$(find stack_master)/launch/withbag/bag_localization.launch">
+    <arg name="map" value="$(arg map)" />
+  </include>
+  
+  <node pkg="perception" type="dynamic_tracker_server.py" name="dyn_perception" output="screen" />
+
+  <node pkg="grid_filter" type="grid_filter_test.py" name="grid_filter" output="screen">
+    <param name="map" value="$(arg map)" />
+  </node>
+
+</launch>

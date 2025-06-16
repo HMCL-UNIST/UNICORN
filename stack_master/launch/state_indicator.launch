@@ -1,0 +1,7 @@
+<launch>
+
+  <node name="blink1_node" pkg="blink1" type="blink1_node" output="screen"/>
+  
+  <node pkg="state_machine" type="state_indicator_node.py" name="state_indicator" output="screen"/>
+
+</launch>

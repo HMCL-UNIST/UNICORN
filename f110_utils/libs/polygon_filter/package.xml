@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>polygon_filter</name>
+  <version>0.0.0</version>
+  <description>
+
+    polygon_filter
+
+  </description>
+  <maintainer email="ryujs@unist.ac.kr">Jonathan Becker</maintainer>
+  <license>Apache License 2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+
+  <export>
+    <build_type>catkin</build_type>
+  </export>
+</package>

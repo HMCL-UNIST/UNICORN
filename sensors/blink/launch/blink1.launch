@@ -1,0 +1,8 @@
+<?xml version="1.0"?>
+<launch>   
+
+  <!-- Start the blink(1) node --> 
+  <node name="blink1_node" pkg="blink1" type="blink1_node" output="screen"/>
+	
+
+</launch>

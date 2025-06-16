@@ -1,0 +1,11 @@
+# data_collection_duration: 50 # seconds
+# num_of_iterations: 10 # number of iterations for training
+# num_of_epochs: 200 # number of epochs for training at each iteration
+# lr: 0.0001 # learning rate
+# weight_decay: 0.0 # weight decay
+
+data_collection_duration: 50 # seconds
+num_of_iterations: 10 # number of iterations for training
+num_of_epochs: 200 # number of epochs for training at each iteration
+lr: 0.0001 # learning rate
+weight_decay: 0.0 # weight decay

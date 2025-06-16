@@ -1,0 +1,48 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+    <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+
+    <arg name="map" doc="" />
+    <arg name="gb_conf_path" default="$(find stack_master)/config/$(arg racecar_version)/global_planner_params.yaml" />
+    <arg name="reverse" default="False" doc="Set True if you want reverse direction of raceline" />
+    <arg name="create_map" default="True" doc="Set false if you use only global optimization" />
+    <arg name="create_global_path" default="Ture" doc="Set false if you want to save map only" />
+    <arg name="show_plots" default="False" doc="Set true if you want see the result with images" />
+    <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+
+    <param name="racecar_version" value="$(arg racecar_version)" />
+
+    <!--  launch global planner -->
+    <node pkg="gb_optimizer" type="global_planner_node.py" name="global_planner" output="screen">
+        <rosparam file="$(arg gb_conf_path)" />
+        <param name="create_map" value="$(arg create_map)" />
+        <param name="create_global_path" value="$(arg create_global_path)"/>
+        <param name="map" value="$(arg map)" />
+        <param name="map_dir" value="$(find stack_master)/maps/$(arg map)/" />
+        <param name="reverse_mapping" value="$(arg reverse)" />
+        <param name="show_plots" value="$(arg show_plots)" />
+    </node>
+
+    <group if="$(arg create_map)">
+        <include file="$(find stack_master)/launch/middle_level.launch">
+            <arg name="racecar_version" value="$(arg racecar_version)" />
+            <arg name="map" value="$(arg map)" />
+            <arg name="SE" value="SE_mapping" />
+            <arg name="use_vesc_imu" value="$(arg use_vesc_imu)" />
+            <arg name="low_level" value="false" />
+        </include>
+        <!-- Hack to create the directory -->
+        <param name="mkdir" command="mkdir -p $(find stack_master)/maps/$(arg map)" />
+    </group>
+    <group unless="$(arg create_map)">
+        <node pkg="map_server" name="map_server" type="map_server"
+            args="$(find stack_master)/maps/$(arg map)/$(arg map).yaml" />
+    </group>
+
+    <group if="$(arg create_global_path)">
+        <include file="$(find stack_master)/launch/sector_slicing.launch">
+            <arg name="map" value="$(arg map)" />
+        </include>
+    </group>
+
+</launch>

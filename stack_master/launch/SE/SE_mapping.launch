@@ -1,0 +1,46 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <!-- launches the state estimation nodes -->
+  <!-- PARAMS -->
+  <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+  <arg name="loc_algo" default="slam" />
+  <arg name="pose_loc_topic" default="/tracked_pose" />
+  <arg name="publish_tf" default="False" />
+  <arg name="pf_covariance" default="False" />
+  <arg name="loc_only" default="False" />
+  <arg name="map" default="hangar" />
+  <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+
+  <!-- LAUNCH mapping -->
+  <group unless="$(arg use_vesc_imu)">
+    <include file="$(find stack_master)/launch/SE/slam/carto_mapping.launch"/>
+  </group>
+
+  <group if="$(arg use_vesc_imu)">
+    <include file="$(find stack_master)/launch/SE/slam/carto_mapping.launch">
+      <arg name="imu_topic" value="/vesc/sensors/imu/raw"/>
+      <arg name="config_base" value="mapping_vesc.lua" />
+    </include>
+  </group>
+  
+  <!-- Launch map server with regular map name -->
+  <!-- Read from pf_map if using this loc_method -->
+  <!-- <node pkg="map_server" name="map_server" type="map_server"
+    args="$(find stack_master)/maps/$(arg map)/$(arg map).yaml">
+  </node> -->
+
+  <!-- Odometry Filter -->
+  <node pkg="robot_localization" type="ekf_localization_node"  name="robot_localization_ekf_node_map" clear_params="true" output="log">
+    <rosparam command="load" file="$(find stack_master)/config/$(arg racecar_version)/SE/carto_only.yaml" />
+    <remap from="odometry/filtered" to="car_state/odom" />
+  </node>
+  
+  <!-- <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 10" /> -->
+
+  <!-- start Car State Node -->
+  <node name="extract_pose" pkg="stack_master" type="extract_pose_from_odom.py" output="screen">
+      <param name="in_topic" value="car_state/odom" />
+      <param name="out_topic" value="car_state/pose" />
+  </node>
+
+</launch>

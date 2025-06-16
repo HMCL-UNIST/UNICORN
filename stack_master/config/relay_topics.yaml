@@ -1,0 +1,90 @@
+relay_topics:
+  - input: "/scan"
+    type: "sensor_msgs/LaserScan"
+
+  - input: "/car_state/pose"
+    type: "geometry_msgs/PoseStamped"
+
+  - input: "/map"
+    type: "nav_msgs/OccupancyGrid"
+    latch : True
+
+  - input: "/map_new"
+    type: "nav_msgs/OccupancyGrid"
+
+  - input: "/state_marker"
+    type: "visualization_msgs/Marker"
+
+  - input: "/local_waypoints/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/centerline_waypoints/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/global_waypoints/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/planner/avoidance/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/planner/start_wpnts/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/planner/recovery/markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/detect/breakpoints_markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/detect/obstacles_markers_new"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/tracking/static_dynamic_marker_pub"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/collision_predict/beginn"
+    type: "visualization_msgs/Marker"
+
+  - input: "/collision_predict/end"
+    type: "visualization_msgs/Marker"
+
+  - input: "/lookahead_point"
+    type: "visualization_msgs/Marker"
+
+  - input: "/lap_marker"
+    type: "visualization_msgs/Marker"
+
+  - input: "/future_position"
+    type: "visualization_msgs/Marker"
+    
+  - input: "/lap_data_vis"
+    type: "visualization_msgs/Marker"
+
+  - input: "/state_machine/overtaking_target"
+    type: "visualization_msgs/Marker"
+
+  - input: "/state_machine/trailing_target"
+    type: "visualization_msgs/Marker"
+
+  - input: "/sector_markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/ot_sector_markers"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/opponent_prediction_markerarray"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/opponent_traj_markerarray"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/mpc_controller/predicted_position"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/planner/avoidance/markers_sqp"
+    type: "visualization_msgs/MarkerArray"
+
+  - input: "/spline_sample_points"
+    type: "visualization_msgs/MarkerArray"
+
+    

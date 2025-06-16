@@ -1,0 +1,32 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "${default}",
+        "limitSymbolsToIncludedHeaders": false
+      },
+      "includePath": [
+        "/home/unicorn/catkin_ws/devel/include/**",
+        "/opt/ros/noetic/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/sensors/blink/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/libs/frenet_conversion/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/nodes/frenet_conversion_server/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/nodes/frenet_odom_republisher/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/libs/grid_filter/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/nodes/lap_analyser/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/perception/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/libs/polygon_filter/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/f110_utils/libs/vel_planner/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/sensors/vesc/vesc_ackermann/include/**",
+        "/home/unicorn/catkin_ws/src/race_stack/sensors/vesc/vesc_driver/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
+    }
+  ],
+  "version": 4
+}

@@ -1,0 +1,37 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <!-- launches the state estimation nodes -->
+  <!-- PARAMS -->
+  <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+  <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+  <arg name="bag" default="False" doc="whether use bag" />
+  <arg name="map"/>
+
+  <group if="$(arg bag)">
+    <param name="use_sim_time" value="$(arg bag)" />
+    <include file="$(find stack_master)/config/$(arg racecar_version)/devices/static_transforms.launch.xml"/>
+    <node pkg="stack_master" type="relay_node.py" name="relay_node" output="screen"/>
+  </group>
+
+  <group unless="$(arg bag)">
+    <include file="$(find stack_master)/launch/low_level.launch">
+      <arg name="racecar_version" value="$(arg racecar_version)" />
+    </include>
+  </group>
+
+  <!-- LAUNCH Localization -->
+  <group unless="$(arg use_vesc_imu)">
+    <include file="$(find stack_master)/launch/SE/slam/carto_update.launch">
+      <arg name="map" value="$(arg map)" />
+    </include>
+  </group>
+
+  <group if="$(arg use_vesc_imu)">
+    <include file="$(find stack_master)/launch/SE/slam/carto_update.launch">
+      <arg name="map" value="$(arg map)" />
+      <arg name="imu_topic" value="/vesc/sensors/imu/raw"/>
+      <arg name="config_base" value="localization_vesc.lua" />
+    </include>
+  </group>
+
+</launch>

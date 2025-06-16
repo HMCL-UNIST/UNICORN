@@ -1,0 +1,6 @@
+[submodule "state_estimation/cartographer_unicorn"]
+	path = state_estimation/cartographer_unicorn
+	url = https://github.com/jsryu118/cartographer_unicorn.git
+[submodule "f110_utils/libs/ccma"]
+	path = f110_utils/libs/ccma
+	url = https://github.com/ForzaETH/ccma.git

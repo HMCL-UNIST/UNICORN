@@ -1,0 +1,34 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+  <arg name="map"
+    doc="Map path to load. Will search stack_master/maps for a map of the same name." />
+  <arg name="SE" default="carto_only"
+    doc="Localization algorithm to use. carto_only, carto_PF, carto_icp, PF_carto, PF_vesc, " />
+  <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+  <arg name="low_level" default="true" doc="whether execute low level" />
+  <param name="racecar_version" value="$(arg racecar_version)" />
+
+  <!-- launch vesc driver, cartographer, mux, tf_transformer... - complete base -->
+  <group if="$(arg low_level)">
+    <include file="$(find stack_master)/launch/low_level.launch">
+      <arg name="racecar_version" value="$(arg racecar_version)" />
+    </include>
+  </group>
+
+  <!-- LAUNCH ESTIMATOR -->
+  <include file="$(find stack_master)/launch/SE/$(arg SE).launch">
+    <arg name="racecar_version" value="$(arg racecar_version)" />
+    <arg name="map" value="$(arg map)" />
+    <arg name="use_vesc_imu" value="$(arg use_vesc_imu)" />
+  </include>
+
+  <!--  launch Frenet Conversion Service (only useful when global trajectory exists) -->
+  <node pkg="frenet_conversion_server" name="frenet_conversion_server_node" type="frenet_conversion_server_node" output="screen" >
+      <param name="PerceptionOnly" type="bool" value="false"/>
+  </node>
+
+  <!-- republishes car state odom in frenet frame -->
+  <include file="$(find frenet_odom_republisher)/launch/frenet_odom_republisher.launch" />
+
+</launch>

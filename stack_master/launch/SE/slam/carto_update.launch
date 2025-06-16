@@ -1,0 +1,49 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <!-- launches the state estimation nodes -->
+  <!-- PARAMS -->
+
+  <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+  <arg name="config_base" default="update.lua"/>
+  <arg name="map" default="v0411" />
+  <arg name="scan_topic" default="scan" />
+  <arg name="odom_topic" default="/vesc/odom" />
+  <arg name="imu_topic" default="/imu/data"/>
+  <arg name="load_frozen" default="False"/>
+
+
+  <node name="cartographer_node" pkg="cartographer_ros"
+    type="cartographer_node"
+    args="
+    -configuration_directory $(find stack_master)/config/$(arg racecar_version)/SE/slam
+    -configuration_basename $(arg config_base)
+    -load_state_filename $(find stack_master)/maps/$(arg map)/$(arg map).pbstream
+    -load_frozen_state=true"
+     >
+    <remap from="scan" to="$(arg scan_topic)" />
+    <remap from="odom" to="$(arg odom_topic)" />
+    <remap from="imu" to="$(arg imu_topic)" />
+    <!-- <remap from="/tracked_pose" to="/tracked_pose2" /> -->
+  </node>
+
+
+  <!-- Keep this here to evaluate map shift -->
+  <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+    type="cartographer_occupancy_grid_node" args="-resolution 0.05">
+    <!-- <remap from="/map" to="/map_new" /> -->
+  </node>
+
+  <!--  Launch Slam pose setter -->
+  <node pkg="set_pose" type="set_pose_v2_node.py" name="set_slam_pose_node" output="screen">
+    <!-- Set the config dir of SLAM -->
+    <param name="config_dir" value="$(find stack_master)/config/$(arg racecar_version)/SE/slam" />
+    <param name="config_base" value="$(arg config_base)" />
+  </node>
+
+  <node pkg="set_pose" type="save_carto_map.py" name="save_carto_map" output="screen">
+    <!-- Set the config dir of SLAM -->
+    <param name="map" value="$(arg map)" />
+    <param name="config_base" value="$(arg config_base)" />
+  </node>
+
+</launch>

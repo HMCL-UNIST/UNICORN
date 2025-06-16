@@ -1,0 +1,30 @@
+<!-- -*- mode: XML -*- -->
+<launch>  
+    <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+    <arg name="map"/>
+    <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+
+    <param name="use_sim_time" value="true" />
+
+    <include file="$(find stack_master)/config/$(arg racecar_version)/devices/static_transforms.launch.xml"/>
+    
+    <group ns="vesc">
+      <arg name="vesc_config" default="$(find stack_master)/config/$(arg racecar_version)/devices/vesc.yaml" />
+      <rosparam file="$(arg vesc_config)" command="load" />
+      <node name="dyn_wheel_odom" pkg="vesc_ackermann" type="dynamic_wheel_odom_server.py" output="screen"/>
+      <node pkg="vesc_ackermann" type="vesc_to_odom_node" name="vesc_to_odom" />
+    </group>
+
+  
+    <include file="$(find stack_master)/launch/middle_level.launch">
+        <arg name="racecar_version" value="$(arg racecar_version)" />
+        <arg name="map" value="$(arg map)" />
+        <arg name="SE" value="carto_only" />
+        <arg name="use_vesc_imu" value="$(arg use_vesc_imu)" />
+        <arg name="low_level" value="false" />
+    </include>
+
+
+    
+  </launch>
+  

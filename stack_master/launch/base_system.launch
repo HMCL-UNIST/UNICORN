@@ -1,0 +1,74 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+  <arg name="map"                                        doc="Will search stack_master/maps for a map of the same name." />
+  <arg name="sim" default="False"                        doc="launching  from F110 Simulator." />
+  <arg name="algo" default="slam"                        doc="Localization algorithm to use. Possible values: slam/pf2 " />
+  <arg name="SE" default="carto_only"
+    doc="Localization algorithm to use. carto_only, carto_PF, carto_icp, PF_carto, PF_vesc, " />
+  <arg name="pf_covariance" default="True"
+    doc="If using the pf2 localization algorithm, whether or not to propagate the computed covariance." />
+  <arg name="tire_model" default="pacejka"
+    doc="If using the F110 Simulator, what tire model to use." />
+  <arg name="scanalign" default="False"
+    doc="Whether to launch the scan-align node that calculates localization accuracy." />
+  <arg name="use_vesc_imu" default="False" doc="whether use built-in vesc imu or microstrain" />
+
+  <param name="racecar_version" value="$(arg racecar_version)" />
+  <param name="map" value="$(arg map)" />
+  <param name="sim" value="$(arg sim)" />
+
+  <group unless="$(arg sim)">
+    <!-- launch Low_level, with State Estimator(Cartographer, PF, Robot Localization) -->
+    <include file="$(find stack_master)/launch/middle_level.launch">
+      <arg name="racecar_version" value="$(arg racecar_version)" />
+      <arg name="map" value="$(arg map)" />
+      <arg name="SE" value="$(arg SE)" />
+      <arg name="use_vesc_imu" value="$(arg use_vesc_imu)" />
+    </include>
+
+    <!-- Launch republisher -->
+    <node name="global_republisher" pkg="gb_optimizer" type="global_trajectory_publisher.py">
+      <param name="map" value="$(arg map)" />
+    </node>
+
+    <!--  launch Speed Sector Server && Scaler-->
+    <rosparam ns="map_params" command="load" file="$(find stack_master)/maps/$(arg map)/speed_scaling.yaml"/>
+    <node pkg="sector_tuner" type="sector_server.py" name="dyn_sector_speed" output="screen" />
+    <node pkg="sector_tuner" type="vel_scaler_node.py" name="velocity_scaler" output="screen"/>
+
+    <!--  Launch Overtaking Sector Server && Interpolator-->
+    <rosparam ns="ot_map_params" command="load" file="$(find stack_master)/maps/$(arg map)/ot_sectors.yaml" />
+    <node pkg="overtaking_sector_tuner" type="ot_sector_server.py" name="dyn_sector_overtake" output="screen" />
+    <node pkg="overtaking_sector_tuner" type="ot_interpolator.py" name="ot_interpolator" output="screen"/>
+
+    <include file="$(find stack_master)/launch/state_indicator.launch"/>
+  </group>
+
+  <group if="$(arg sim)">
+    <!-- launch pbl sim -->
+    <include file="$(find f1tenth_simulator)/launch/pbl_sim.launch">
+      <arg name="mapping_bool" value="False" />
+      <arg name="map" value="$(arg map)" />
+      <arg name="racecar_version" value="$(arg racecar_version)" />
+      <arg name="tire_model" value="$(arg tire_model)" />
+    </include>
+
+    <!-- republishes car state odom in frenet frame -->
+    <include file="$(find frenet_odom_republisher)/launch/frenet_odom_republisher.launch" />
+  </group>
+
+  <!-- analyses and publishes lap times and lateral errors -->
+  <node name="lap_analyser" pkg="lap_analyser" type="lap_analyser.py" output="screen">
+    <param name="loc_algo" value="$(arg algo)" />
+  </node>
+
+  <group ns="dyn_planners">
+    <include file="$(find stack_master)/launch/planners.launch"><arg name="planners" value="global_tracking" /></include>
+    <include file="$(find stack_master)/launch/planners.launch"><arg name="planners" value="recovery_planner" /></include>
+    <include file="$(find stack_master)/launch/planners.launch"><arg name="planners" value="start_planner" /></include>
+    <include file="$(find stack_master)/launch/planners.launch"><arg name="planners" value="static_avoidance_planner" /></include>
+    <include file="$(find stack_master)/launch/planners.launch"><arg name="planners" value="dynamic_avoidance_planner" /></include>
+  </group>
+
+</launch>

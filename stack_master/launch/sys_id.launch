@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="odom_topic" default="/car_state/odom" />
+    <!-- <arg name="ackermann_cmd_topic" default="/vesc/high_level/ackermann_cmd_mux/input/nav_1" /> -->
+    <arg name="ackermann_cmd_topic" default="/vesc/low_level/ackermann_cmd_mux/output" />
+
+    <arg name="save_LUT_name" default="SRX1-0427" />
+    <arg name="plot_model" default="True" />
+    <arg name="racecar_version" default="SRX1-0427"/>
+    <arg name="loop_rate" default="50" />
+
+    <node pkg="on_track_sys_id" name="on_track_sys_id" type="on_track_sys_id.py" output="screen">
+        <param name="odom_topic" value="$(arg odom_topic)" />
+        <param name="ackermann_cmd_topic" value="$(arg ackermann_cmd_topic)" />
+        <param name="save_LUT_name" value="$(arg save_LUT_name)" />
+        <param name="plot_model" value="$(arg plot_model)" />
+        <param name="racecar_version" value="$(arg racecar_version)" />
+        <param name="loop_rate" value="$(arg loop_rate)" />
+    </node>
+
+</launch>

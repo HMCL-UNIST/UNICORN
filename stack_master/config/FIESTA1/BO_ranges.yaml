@@ -1,0 +1,56 @@
+l1_param:
+  t_clip_min:
+    lower_bound: 0.8
+    upper_bound: 1.0
+  m_l1:
+    lower_bound: 0.53
+    upper_bound: 0.58
+  q_l1:
+    lower_bound: -0.2
+    upper_bound: 0.2
+
+Sector0:
+  lower_bound: 0.58
+  upper_bound: 0.63
+Sector1:
+  lower_bound: 0.58
+  upper_bound: 0.60
+Sector2:
+  lower_bound: 0.7
+  upper_bound: 0.72
+Sector3:
+  lower_bound: 0.62
+  upper_bound: 0.68
+Sector4:
+  lower_bound: 0.62
+  upper_bound: 0.68
+Sector5:
+  lower_bound: 0.62
+  upper_bound: 0.68
+Sector6:
+  lower_bound: 0.58
+  upper_bound: 0.60
+Sector7:
+  lower_bound: 0.58
+  upper_bound: 0.60
+Sector8:
+  lower_bound: 0.58
+  upper_bound: 0.63
+Sector9:
+  lower_bound: 0.65
+  upper_bound: 0.7
+Sector10:
+  lower_bound: 0.58
+  upper_bound: 0.63
+Sector11:
+  lower_bound: 0.65
+  upper_bound: 0.7
+Sector12:
+  lower_bound: 0.65
+  upper_bound: 0.7
+Sector13:
+  lower_bound: 0.58
+  upper_bound: 0.63
+
+
+

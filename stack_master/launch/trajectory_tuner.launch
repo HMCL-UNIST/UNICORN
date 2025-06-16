@@ -1,0 +1,16 @@
+<launch>
+  <arg name="map" doc="" />
+  <arg name="pub_map" default="False" />
+
+  <node pkg="gb_optimizer" name="global_traj_tuner" type="global_trajectory_tuner.py" output="screen">
+    <param name="map" value="$(arg map)"/>
+    <param name="map_dir" value="$(find stack_master)/maps/$(arg map)/" />
+  </node>
+
+  <group if="$(arg pub_map)">
+    <node pkg="map_server" name="map_server" type="map_server"
+      args="$(find stack_master)/maps/$(arg map)/$(arg map).yaml">
+    </node>
+  </group>
+
+</launch>

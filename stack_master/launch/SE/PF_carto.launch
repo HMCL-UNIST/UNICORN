@@ -1,0 +1,48 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+  <!-- launches the state estimation nodes -->
+  <!-- PARAMS -->
+  <arg name="loc_algo" default="slam" />
+  <arg name="pose_loc_topic" default="/tracked_pose" />
+  <arg name="publish_tf" default="False" />
+  <arg name="pf_covariance" default="False" />
+  <arg name="loc_only" default="False" />
+  <arg name="map" default="hangar" />
+  <arg name="racecar_version" default="NUC1" />
+
+  <!-- LAUNCH Localization -->
+  <include file="$(find stack_master)/launch/SE/slam/carto_odometry.launch">
+    <arg name="config_dir" value="$(find stack_master)/config/$(arg racecar_version)/SE/slam" />
+    <arg name="config_base" value="odometry_no_tf.lua" />
+  </include>
+
+  <include file="$(find particle_filter)/launch/localize.launch">
+    <arg name="odometry_topic" value="tracked_pose"/>
+    <arg name="use_pose_input" value="1"/>
+  </include>
+
+  <!-- Launch map server with regular map name -->
+  <!-- Read from pf_map if using this loc_method -->
+  <node pkg="map_server" name="map_server" type="map_server"
+    args="$(find stack_master)/maps/$(arg map)/$(arg map).yaml">
+  </node>
+
+  <node pkg="stack_master" name="add_pose_cov" type="pose_util.py">
+      <param name="in_topic" value="pf_pose" />
+      <param name="out_topic" value="pf_pose_with_cov" />
+  </node>    
+  <!-- Odometry Filter -->
+  <node pkg="robot_localization" type="ekf_localization_node"  name="robot_localization_ekf_node_map" clear_params="true" output="log">
+    <rosparam command="load" file="$(find stack_master)/config/$(arg racecar_version)/SE/PF_vesc.yaml" />
+    <remap from="odometry/filtered" to="/state_estimation/odom" />
+  </node>
+  <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 10" />
+
+  <!-- start Car State Node -->
+  <node name="carstate_node" pkg="stack_master" type="carstate_node.py" output="screen">
+      <param name="debug" value="False" />
+      <param name="localization" value="$(arg loc_algo)" />
+      <param name="odom_topic" value="/state_estimation/odom" />
+  </node>
+
+</launch>

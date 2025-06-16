@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<package>
+  <name>blink1</name>
+  <version>0.0.0</version>
+  <description>This package provides a node that manipulates Blink(1) RGB LED using a service. Accompanies the node an API that facilitates the use of the service.</description>
+
+  
+  <maintainer email="gpereira@cmu.edu">Guilherme Pereira (The AIR lab, Carnegie Mellon University)</maintainer>
+  
+  <url type="website">http://ros.org/wiki/blink1</url>
+
+  <author>Guilherme Pereira (The AIR lab, Carnegie Mellon University) </author>
+  
+  <license>BSD</license>
+ 
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>libusb-dev</build_depend>
+  <build_depend>message_generation</build_depend>
+  <run_depend>message_runtime</run_depend>
+  <run_depend>roscpp</run_depend>
+  <run_depend>std_msgs</run_depend>
+  
+  <export>
+   
+  </export>
+</package>

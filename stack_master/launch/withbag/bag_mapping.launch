@@ -1,0 +1,51 @@
+<!-- -*- mode: XML -*- -->
+<launch>  
+    <arg name="racecar_version" default="$(env CAR_NAME)"  doc="Physical racecar used. Possible values: UNICORNx" />
+    <arg name="map"/>
+    <arg name="gb_conf_path" default="$(find stack_master)/config/$(arg racecar_version)/global_planner_params.yaml" />
+
+    <param name="use_sim_time" value="true" />
+    <param name="racecar_version" value="$(arg racecar_version)" />
+
+    <param name="mkdir" command="mkdir -p $(find stack_master)/maps/$(arg map)" />
+
+    <include file="$(find stack_master)/config/$(arg racecar_version)/devices/static_transforms.launch.xml"/>
+    
+    <group ns="vesc">
+      <arg name="vesc_config" default="$(find stack_master)/config/$(arg racecar_version)/devices/vesc.yaml" />
+      <rosparam file="$(arg vesc_config)" command="load" />
+      <node name="dyn_wheel_odom" pkg="vesc_ackermann" type="dynamic_wheel_odom_server.py" output="screen"/>
+      <node pkg="vesc_ackermann" type="vesc_to_odom_node" name="vesc_to_odom" />
+    </group>
+  
+    <arg name="config_dir" default="$(find stack_master)/config/$(arg racecar_version)/SE/slam" />
+    <arg name="config_base" default="mapping.lua" />
+    <arg name="scan_topic" default="/scan" />
+    <arg name="imu_topic" default="/imu/data"/>
+    <arg name="odom_topic" default="/vesc/odom" />  
+  
+    <node name="cartographer_node" pkg="cartographer_ros"
+      type="cartographer_node"
+      args="
+      -configuration_directory $(arg config_dir)
+      -configuration_basename $(arg config_base)">
+      <remap from="scan" to="$(arg scan_topic)" />
+      <remap from="odom" to="$(arg odom_topic)" />
+      <remap from="imu" to="$(arg imu_topic)" />
+    </node>
+  
+    <!-- Keep this here to evaluate map shift -->
+    <node name="cartographer_occupancy_grid_node" pkg="cartographer_ros"
+      type="cartographer_occupancy_grid_node" args="-resolution 0.05">
+    </node>
+
+    <!--  launch global planner -->
+    <node pkg="gb_optimizer" type="global_planner_node.py" name="global_planner" output="screen">
+        <rosparam file="$(arg gb_conf_path)" />
+        <param name="create_map" value="true" />
+        <param name="create_global_path" value="false"/>
+        <param name="map" value="$(arg map)" />
+        <param name="map_dir" value="$(find stack_master)/maps/$(arg map)/" />
+    </node>
+  </launch>
+  

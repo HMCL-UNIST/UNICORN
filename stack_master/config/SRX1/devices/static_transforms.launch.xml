@@ -1,0 +1,27 @@
+<!-- -*- mode: XML -*- -->
+<launch>
+   <!-- TFs -->
+  <arg name="pub_map_to_odom" default="False"/>
+  <!-- base_link_to_imu -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="base_link_to_imu" 
+        args="0.085 0.06 0.065 0.0 1.0 0.0 0.0 base_link imu" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="imu_to_imu_rot" 
+        args="0.0 0.0 0.0 0.0 1.0 0.0 0.0 imu imu_rot" />
+
+  <!-- base_link_to_laser -->
+  <node pkg="tf2_ros" type="static_transform_publisher" name="base_link_to_laser" 
+        args="0.270 0.0 0.127 0.0 0.0 0.0 1.0 base_link laser" />
+
+  <node pkg="tf2_ros" type="static_transform_publisher" name="base_link_to_vesc_imu" 
+        args="0.10 0.0 0.127 0.0 0.0 -0.7071 0.7071 base_link vesc_imu" />
+  <node pkg="tf2_ros" type="static_transform_publisher" name="vesc_imu_to_vesc_imu_rot" 
+        args="0.0 0.0 0.0 0.0 0.0 0.7071 0.7071 vesc_imu vesc_imu_rot" />
+  <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_odom2" 
+        args="0.0 0.0 0.0 0.0 0.0 0.0 1.0 map odom2" /> -->
+
+  <!-- Map to Odom  -->
+  <group if="$(arg pub_map_to_odom)">
+    <node pkg="tf" type="static_transform_publisher" name="map_to_odom" args="0 0 0 0 0 0 map odom 10" />
+  </group>
+</launch>
