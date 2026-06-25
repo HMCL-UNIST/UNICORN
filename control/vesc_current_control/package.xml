@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>vesc_current_control</name>
+  <version>0.1.0</version>
+  <description>VESC 속도 PID → 전류 변환 노드 + 벤치 테스트 툴 (GUI/console). ackermann_to_vesc(속도→eRPM, VESC 내부 RPM PID) 대체.</description>
+  <maintainer email="heedo7425@gmail.com">heedo7425</maintainer>
+  <license>MIT</license>
+
+  <depend>rclpy</depend>
+  <depend>std_msgs</depend>
+  <depend>ackermann_msgs</depend>
+  <depend>vesc_msgs</depend>
+  <exec_depend>python_qt_binding</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

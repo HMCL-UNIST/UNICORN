@@ -1,0 +1,34 @@
+# === Speed PID -> Current ===
+# ackermann_to_vesc (속도→eRPM, VESC 내부 RPM PID) 대체.
+# 목표속도 PID 출력을 전류[A] 로 변환해 /commands/motor/current 로 publish.
+speed_pid_to_current_node:
+  ros__parameters:
+    # 실측속도 환산: m/s = (speed_sign*state.speed - offset)/gain
+    # gain 은 active 설정(vesc_config.yaml)과 동일하게 3423.0 사용
+    speed_to_erpm_gain: 3423.0
+    speed_to_erpm_offset: 0.0
+    speed_sign: 1.0           # 실측(HW 2026-06-16): +current=전진 시 state.speed 양수 → +1.0
+
+    # PID gains — 벤치/실차에서 튜닝 (시작값, 보수적)
+    kp: 8.0
+    ki: 20.0
+    kd: 0.0
+
+    # 전류 출력 한계 [A]. current_min 음수 = 회생제동 허용.
+    # vesc_driver 캡(bench_real 기본 90/-55)과 동일. 펌웨어 모터±100/회생-60 안쪽.
+    # 첫 테스트는 launch arg 로 낮춰 시작.
+    current_max: 90.0
+    current_min: -55.0
+    current_sign: 1.0         # 전류부호↔진행방향: 벤치 확인 후 필요시 -1.0
+
+    integral_max: 50.0        # 적분 기여 전류 한계 [A] (anti-windup) — current_max 상향에 맞춤
+    control_rate: 100.0       # PID 주기 [Hz]
+    cmd_timeout: 0.3          # ackermann_cmd 끊기면 전류 0 [s]
+    stop_speed_threshold: 0.05
+    max_abs_speed: 12.0       # 폭주 가드[m/s] — 레이스 최고속 위로(부호어긋남만 차단)
+
+    # 조향(servo) — ackermann_to_vesc 와 동일값 (vesc_config.yaml 기준)
+    steering_angle_to_servo_gain: 0.5135
+    steering_angle_to_servo_offset: 0.445
+    servo_max: 0.85
+    servo_min: 0.15
