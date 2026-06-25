@@ -10,6 +10,7 @@ from visualization_msgs.msg import Marker
 
 from ament_index_python.packages import get_package_share_directory
 from collections import deque
+from copy import deepcopy
 import numpy as np
 
 from datetime import datetime
@@ -24,17 +25,14 @@ class LapAnalyser(Node):
 
         self.get_logger().info("Lap_analyser node started")
 
-        # Wait for state machine to start to figure out where to place the visualization message
-        self.vis_pos = Pose()
+        # Where to place the lap-stats text marker. ROS1 blocked here with
+        # wait_for_message("/state_marker") to grab the state machine's marker pose;
+        # rclpy can't block in __init__, so we latch it lazily on the first
+        # /state_marker (marker_cb) instead. Until then vis_pos stays unset so the
+        # text isn't pinned to the origin.
+        self.vis_pos = None
         self.state_marker = None
         self.marker_sub = self.create_subscription(Marker, '/state_marker', self.marker_cb, 10)
-
-        if self.state_marker is not None:
-            self.vis_pos = self.state_marker.pose
-
-        self.vis_pos.position.z += 1.5  # appear on top of the state marker
-        self.get_logger().info(
-            f"LapAnalyser will be centered at {self.vis_pos.position.x}, {self.vis_pos.position.y}, {self.vis_pos.position.z}")
 
         # stuff for min distance to track boundary
         self.wp_flag = False
@@ -99,6 +97,14 @@ class LapAnalyser(Node):
 
     def marker_cb(self, data: Marker):
         self.state_marker = data
+        # Latch the text-marker position once, from the first state marker (ROS1
+        # did this via wait_for_message in __init__).
+        if self.vis_pos is None:
+            self.vis_pos = deepcopy(data.pose)
+            self.vis_pos.position.z += 1.5  # appear on top of the state marker
+            self.get_logger().info(
+                f"LapAnalyser will be centered at {self.vis_pos.position.x}, "
+                f"{self.vis_pos.position.y}, {self.vis_pos.position.z}")
 
     def waypoints_cb(self, data: WpntArray):
         """
@@ -231,6 +237,12 @@ class LapAnalyser(Node):
         mark.ns = 'lap_info'
         mark.type = Marker.TEXT_VIEW_FACING
         mark.action = Marker.ADD
+        if self.vis_pos is None:
+            # /state_marker not seen yet -> skip this lap's text marker rather than
+            # pinning it to the origin (it latches on the first /state_marker).
+            self.get_logger().warn("vis_pos not set (no /state_marker yet); skipping lap text marker",
+                                    throttle_duration_sec=5.0)
+            return
         mark.pose = self.vis_pos
         mark.scale.x = 0.0
         mark.scale.y = 0.0
