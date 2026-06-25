@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# macOS shim for Linux `taskset` (CPU affinity isn't supported the same way on
+# macOS, and the CLI doesn't exist). Strip a leading `-c <cpulist>` / `-c<list>`
+# and any other flags, then exec the actual command. This lets Ubuntu-verified
+# launch files that use launch-prefix="taskset -c N ..." run unchanged on macOS.
+# Activated only on macOS, via the PATH export in unicorn.sh.
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -c)  shift 2 ;;          # -c <cpulist>
+    -c*) shift ;;            # -c1 form
+    --)  shift; break ;;
+    -*)  shift ;;            # ignore other flags
+    *)   break ;;            # first non-flag = the command
+  esac
+done
+exec "$@"
