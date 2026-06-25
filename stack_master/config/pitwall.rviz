@@ -1,802 +1,957 @@
 Panels:
-- Class: rviz_common/Displays
-  Help Height: 138
-  Name: Displays
-  Property Tree Widget:
+  - Class: rviz_common/Displays
+    Help Height: 138
+    Name: Displays
+    Property Tree Widget:
+      Expanded:
+        - /Global Options1
+        - /Status1
+        - /UTILS1
+        - /PLANNER1/Prediction1
+      Splitter Ratio: 0.5
+    Tree Height: 322
+  - Class: rviz_common/Selection
+    Name: Selection
+  - Class: rviz_common/Tool Properties
     Expanded:
-    - /Global Options1
-    - /Status1
-    - /Map Carto1
-    - /Ego Robot1/Ego Scan1
-    - /Odometry1
+      - /2D Goal Pose1
+      - /Publish Point1
+    Name: Tool Properties
+    Splitter Ratio: 0.5886790156364441
+  - Class: rviz_common/Views
+    Expanded:
+      - /Current View1
+    Name: Views
     Splitter Ratio: 0.5
-  Tree Height: 304
-- Class: rviz_common/Selection
-  Name: Selection
-- Class: rviz_common/Tool Properties
-  Expanded:
-  - /2D Goal Pose1
-  - /Publish Point1
-  Name: Tool Properties
-  Splitter Ratio: 0.5886790156364441
-- Class: rviz_common/Views
-  Expanded:
-  - /Current View1
-  Name: Views
-  Splitter Ratio: 0.5
-- Class: pitwall/PitwallPanel
-  Name: pitwall
+  - Class: pitwall/PitwallPanel
+    Name: pitwall
 Visualization Manager:
-  Class: ''
+  Class: ""
   Displays:
-  - Alpha: 0.5
-    Cell Size: 1
-    Class: rviz_default_plugins/Grid
-    Color: 160; 160; 164
-    Enabled: true
-    Line Style:
-      Line Width: 0.029999999329447746
-      Value: Lines
-    Name: Grid
-    Normal Cell Count: 0
-    Offset:
-      X: 0
-      Y: 0
-      Z: 0
-    Plane: XY
-    Plane Cell Count: 10
-    Reference Frame: <Fixed Frame>
-    Value: true
-  - Class: rviz_common/Group
-    Displays:
-    - Alpha: 0.699999988079071
-      Binary representation: false
-      Binary threshold: 100
-      Class: rviz_default_plugins/Map
-      Color Scheme: map
-      Draw Behind: false
+    - Alpha: 0.5
+      Cell Size: 1
+      Class: rviz_default_plugins/Grid
+      Color: 160; 160; 164
       Enabled: true
-      Name: Map
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map
-      Update Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /map_updates
-      Use Timestamp: false
-      Value: true
-    - Alpha: 0.699999988079071
-      Binary representation: false
-      Binary threshold: 100
-      Class: rviz_default_plugins/Map
-      Color Scheme: map
-      Draw Behind: false
-      Enabled: true
-      Name: Map Carto
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /map_carto
-      Update Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /map_updates
-      Use Timestamp: false
-      Value: true
-    - Class: rviz_default_plugins/TF
-      Enabled: false
-      Filter (blacklist): ''
-      Filter (whitelist): ''
-      Frame Timeout: 15
-      Frames:
-        All Enabled: true
-      Marker Scale: 1
-      Name: TF
-      Show Arrows: true
-      Show Axes: true
-      Show Names: false
-      Tree: {}
-      Update Interval: 0
-      Value: false
-    - Class: rviz_common/Group
-      Displays:
-      - Alpha: 1
-        Autocompute Intensity Bounds: true
-        Autocompute Value Bounds:
-          Max Value: 4.604157447814941
-          Min Value: -0.8566509485244751
-          Value: true
-        Axis: X
-        Channel Name: intensity
-        Class: rviz_default_plugins/LaserScan
-        Color: 255; 255; 255
-        Color Transformer: Intensity
-        Decay Time: 0
-        Enabled: true
-        Invert Rainbow: false
-        Max Color: 255; 255; 255
-        Max Intensity: 9.999471664428711
-        Min Color: 0; 0; 0
-        Min Intensity: 0.9865263104438782
-        Name: Ego Scan
-        Position Transformer: XYZ
-        Selectable: true
-        Size (Pixels): 3
-        Size (m): 0.05000000074505806
-        Style: Flat Squares
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Best Effort
-          Value: /scan
-        Use Fixed Frame: true
-        Use rainbow: true
-        Value: true
-      - Alpha: 1
-        Class: rviz_default_plugins/RobotModel
-        Collision Enabled: false
-        Description File: ''
-        Description Source: Topic
-        Description Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /ego_robot_description
-        Enabled: true
-        Links:
-          All Links Enabled: true
-          Expand Joint Details: false
-          Expand Link Details: false
-          Expand Tree: false
-          Link Tree Style: Links in Alphabetic Order
-          back_left_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          back_right_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          front_left_hinge:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          front_left_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          front_right_hinge:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          front_right_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          laser:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-        Mass Properties:
-          Inertia: false
-          Mass: false
-        Name: Ego Robot
-        TF Prefix: ''
-        Update Interval: 0
-        Value: true
-        Visual Enabled: true
-      - Angle Tolerance: 0.10000000149011612
-        Class: rviz_default_plugins/Odometry
-        Covariance:
-          Orientation:
-            Alpha: 0.5
-            Color: 255; 255; 127
-            Color Style: Unique
-            Frame: Local
-            Offset: 1
-            Scale: 1
-            Value: true
-          Position:
-            Alpha: 0.30000001192092896
-            Color: 204; 51; 204
-            Scale: 1
-            Value: true
-          Value: true
-        Enabled: true
-        Keep: 1
-        Name: Odometry
-        Position Tolerance: 0.10000000149011612
-        Shape:
-          Alpha: 1
-          Axes Length: 1
-          Axes Radius: 0.10000000149011612
-          Color: 255; 25; 0
-          Head Length: 0.30000001192092896
-          Head Radius: 0.10000000149011612
-          Shaft Length: 1
-          Shaft Radius: 0.05000000074505806
-          Value: Arrow
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Best Effort
-          Value: /ego_racecar/odom
-        Value: true
-      Enabled: true
-      Name: Ego Robot
-    - Class: rviz_default_plugins/InteractiveMarkers
-      Enable Transparency: true
-      Enabled: true
-      Interactive Markers Namespace: /obstacle_controls
-      Name: Obstacle Controls
-      Show Axes: false
-      Show Descriptions: true
-      Show Visual Aids: false
-      Value: true
-    - Angle Tolerance: 0.10000000149011612
-      Class: rviz_default_plugins/Odometry
-      Covariance:
-        Orientation:
-          Alpha: 0.5
-          Color: 255; 255; 127
-          Color Style: Unique
-          Frame: Local
-          Offset: 1
-          Scale: 1
-          Value: true
-        Position:
-          Alpha: 0.30000001192092896
-          Color: 204; 51; 204
-          Scale: 1
-          Value: true
-        Value: true
-      Enabled: true
-      Keep: 1
-      Name: Odometry
-      Position Tolerance: 0.10000000149011612
-      Shape:
-        Alpha: 1
-        Axes Length: 1
-        Axes Radius: 0.10000000149011612
-        Color: 255; 25; 0
-        Head Length: 0.30000001192092896
-        Head Radius: 0.10000000149011612
-        Shaft Length: 1
-        Shaft Radius: 0.05000000074505806
-        Value: Arrow
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /car_state/odom
-      Value: true
-    Enabled: true
-    Name: UTILS
-  - Class: rviz_common/Group
-    Displays:
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: Tracked obstacles (static/dynamic)
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /tracking/static_dynamic_marker_pub
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Detect obstacle markers
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /detect/obstacles_markers_new
-      Value: false
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Detect breakpoints
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /detect/breakpoints_markers
-      Value: false
-    - Alpha: 1
-      Autocompute Intensity Bounds: true
-      Class: rviz_default_plugins/PointCloud2
-      Color: 255; 255; 0
-      Color Transformer: FlatColor
-      Decay Time: 0
-      Enabled: false
-      Name: Detect on-track points
-      Position Transformer: XYZ
-      Selectable: true
-      Size (Pixels): 3
-      Size (m): 0.05000000074505806
-      Style: Flat Squares
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Best Effort
-        Value: /detect/on_track_points
-      Use Fixed Frame: true
-      Value: false
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: Virtual objects (opp + static)
-      Namespaces:
-        opp_box: true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /vil/opponents_viz
+      Line Style:
+        Line Width: 0.029999999329447746
+        Value: Lines
+      Name: Grid
+      Normal Cell Count: 0
+      Offset:
+        X: 0
+        Y: 0
+        Z: 0
+      Plane: XY
+      Plane Cell Count: 10
+      Reference Frame: <Fixed Frame>
       Value: true
     - Class: rviz_common/Group
       Displays:
-      - Alpha: 1
-        Autocompute Intensity Bounds: true
-        Autocompute Value Bounds:
-          Max Value: 7.091375827789307
-          Min Value: -1.7861844301223755
+        - Alpha: 0.699999988079071
+          Binary representation: false
+          Binary threshold: 100
+          Class: rviz_default_plugins/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: true
+          Name: Map
+          Topic:
+            Depth: 5
+            Durability Policy: Transient Local
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map
+          Update Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /map_updates
+          Use Timestamp: false
           Value: true
-        Axis: X
-        Channel Name: intensity
-        Class: rviz_default_plugins/LaserScan
-        Color: 255; 0; 0
-        Color Transformer: FlatColor
-        Decay Time: 0
-        Enabled: false
-        Invert Rainbow: false
-        Max Color: 255; 255; 255
-        Max Intensity: 4096
-        Min Color: 0; 0; 0
-        Min Intensity: 0
-        Name: Opponent Scan
-        Position Transformer: XYZ
-        Selectable: true
-        Size (Pixels): 3
-        Size (m): 0.05000000074505806
-        Style: Flat Squares
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Best Effort
-          Value: /opp_scan
-        Use Fixed Frame: true
-        Use rainbow: true
-        Value: false
-      - Alpha: 1
-        Class: rviz_default_plugins/RobotModel
-        Collision Enabled: false
-        Description File: ''
-        Description Source: Topic
-        Description Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /opp_robot_description
-        Enabled: true
-        Links:
-          All Links Enabled: true
-          Expand Joint Details: false
-          Expand Link Details: false
-          Expand Tree: false
-          Link Tree Style: Links in Alphabetic Order
-          opp_racecar/back_left_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
+        - Alpha: 0.699999988079071
+          Binary representation: false
+          Binary threshold: 100
+          Class: rviz_default_plugins/Map
+          Color Scheme: map
+          Draw Behind: false
+          Enabled: true
+          Name: Map Carto
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /map_carto
+          Update Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /map_updates
+          Use Timestamp: false
+          Value: true
+        - Class: rviz_default_plugins/TF
+          Enabled: false
+          Filter (blacklist): ""
+          Filter (whitelist): ""
+          Frame Timeout: 15
+          Frames:
+            All Enabled: true
+          Marker Scale: 1
+          Name: TF
+          Show Arrows: true
+          Show Axes: true
+          Show Names: false
+          Tree:
+            {}
+          Update Interval: 0
+          Value: false
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 4.604157447814941
+                Min Value: -0.8566509485244751
+                Value: true
+              Axis: X
+              Channel Name: intensity
+              Class: rviz_default_plugins/LaserScan
+              Color: 255; 255; 255
+              Color Transformer: Intensity
+              Decay Time: 0
+              Enabled: true
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 6.046329498291016
+              Min Color: 0; 0; 0
+              Min Intensity: 0.516697108745575
+              Name: Ego Scan
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.05000000074505806
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /scan
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: true
+            - Alpha: 1
+              Class: rviz_default_plugins/RobotModel
+              Collision Enabled: false
+              Description File: ""
+              Description Source: Topic
+              Description Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /ego_robot_description
+              Enabled: true
+              Links:
+                All Links Enabled: true
+                Expand Joint Details: false
+                Expand Link Details: false
+                Expand Tree: false
+                Link Tree Style: Links in Alphabetic Order
+                back_left_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                back_right_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                base_link:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                front_left_hinge:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                front_left_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                front_right_hinge:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                front_right_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                laser:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+              Mass Properties:
+                Inertia: false
+                Mass: false
+              Name: Ego Robot
+              TF Prefix: ""
+              Update Interval: 0
+              Value: true
+              Visual Enabled: true
+            - Angle Tolerance: 0.10000000149011612
+              Class: rviz_default_plugins/Odometry
+              Covariance:
+                Orientation:
+                  Alpha: 0.5
+                  Color: 255; 255; 127
+                  Color Style: Unique
+                  Frame: Local
+                  Offset: 1
+                  Scale: 1
+                  Value: true
+                Position:
+                  Alpha: 0.30000001192092896
+                  Color: 204; 51; 204
+                  Scale: 1
+                  Value: true
+                Value: true
+              Enabled: true
+              Keep: 1
+              Name: Odometry
+              Position Tolerance: 0.10000000149011612
+              Shape:
+                Alpha: 1
+                Axes Length: 1
+                Axes Radius: 0.10000000149011612
+                Color: 255; 25; 0
+                Head Length: 0.30000001192092896
+                Head Radius: 0.10000000149011612
+                Shaft Length: 1
+                Shaft Radius: 0.05000000074505806
+                Value: Arrow
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /ego_racecar/odom
+              Value: true
+          Enabled: true
+          Name: Ego Robot
+        - Class: rviz_default_plugins/InteractiveMarkers
+          Enable Transparency: true
+          Enabled: true
+          Interactive Markers Namespace: /obstacle_controls
+          Name: Obstacle Controls
+          Show Axes: false
+          Show Descriptions: true
+          Show Visual Aids: false
+          Value: true
+        - Angle Tolerance: 0.10000000149011612
+          Class: rviz_default_plugins/Odometry
+          Covariance:
+            Orientation:
+              Alpha: 0.5
+              Color: 255; 255; 127
+              Color Style: Unique
+              Frame: Local
+              Offset: 1
+              Scale: 1
+              Value: true
+            Position:
+              Alpha: 0.30000001192092896
+              Color: 204; 51; 204
+              Scale: 1
+              Value: true
             Value: true
-          opp_racecar/back_right_wheel:
+          Enabled: true
+          Keep: 1
+          Name: Odometry
+          Position Tolerance: 0.10000000149011612
+          Shape:
             Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          opp_racecar/base_link:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          opp_racecar/front_left_hinge:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          opp_racecar/front_left_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          opp_racecar/front_right_hinge:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-          opp_racecar/front_right_wheel:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-          opp_racecar/laser:
-            Alpha: 1
-            Show Axes: false
-            Show Trail: false
-            Value: true
-        Mass Properties:
-          Inertia: false
-          Mass: false
-        Name: Opponent Robot
-        TF Prefix: ''
-        Update Interval: 0
-        Value: true
-        Visual Enabled: true
+            Axes Length: 1
+            Axes Radius: 0.10000000149011612
+            Color: 255; 25; 0
+            Head Length: 0.30000001192092896
+            Head Radius: 0.10000000149011612
+            Shaft Length: 1
+            Shaft Radius: 0.05000000074505806
+            Value: Arrow
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /car_state/odom
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Lap traj
+          Namespaces:
+            lap_max_d: true
+            lap_max_d_text: true
+            lap_min_dist: true
+            lap_min_dist_text: true
+            lap_trajectory: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lap_marker
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Lap data
+          Namespaces:
+            lap_info: true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lap_data_vis
+          Value: true
       Enabled: true
-      Name: Opponent Robot
-    Enabled: true
-    Name: PERCEPTION
-  - Class: rviz_common/Group
-    Displays:
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        ? ''
-        : true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /centerline_waypoints/markers
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: true
-      Name: Global raceline
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /global_waypoints/markers
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Shortest path
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /global_waypoints/shortest_path/markers
-      Value: false
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Track bounds
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /trackbounds/markers
-      Value: false
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Sector markers
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /sector_markers
-      Value: false
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: OT sector markers
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Transient Local
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /ot_sector_markers
-      Value: false
+      Name: UTILS
     - Class: rviz_common/Group
       Displays:
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: true
-        Name: Avoidance path
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/avoidance/markers
-        Value: true
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: false
-        Name: Avoidance (SQP / predictive)
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/avoidance/markers_sqp
-        Value: false
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: false
-        Name: Spline samples
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/avoidance/spline_samples
-        Value: false
-      - Class: rviz_default_plugins/Marker
-        Enabled: false
-        Name: Considered obstacle
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/avoidance/considered_OBS
-        Value: false
-      - Class: rviz_default_plugins/Marker
-        Enabled: false
-        Name: Propagated obstacle
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/avoidance/propagated_obs
-        Value: false
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: false
-        Name: Start waypoints
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/start_wpnts/markers
-        Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Tracked obstacles (static/dynamic)
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /tracking/static_dynamic_marker_pub
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Detect obstacle markers
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /detect/obstacles_markers_new
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Detect breakpoints
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /detect/breakpoints_markers
+          Value: false
+        - Alpha: 1
+          Autocompute Intensity Bounds: true
+          Autocompute Value Bounds:
+            Max Value: 10
+            Min Value: -10
+            Value: true
+          Axis: Z
+          Channel Name: intensity
+          Class: rviz_default_plugins/PointCloud2
+          Color: 255; 255; 0
+          Color Transformer: FlatColor
+          Decay Time: 0
+          Enabled: false
+          Invert Rainbow: false
+          Max Color: 255; 255; 255
+          Max Intensity: 4096
+          Min Color: 0; 0; 0
+          Min Intensity: 0
+          Name: Detect on-track points
+          Position Transformer: XYZ
+          Selectable: true
+          Size (Pixels): 3
+          Size (m): 0.05000000074505806
+          Style: Flat Squares
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Best Effort
+            Value: /detect/on_track_points
+          Use Fixed Frame: true
+          Use rainbow: true
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Virtual objects (opp + static)
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /vil/opponents_viz
+          Value: true
+        - Class: rviz_common/Group
+          Displays:
+            - Alpha: 1
+              Autocompute Intensity Bounds: true
+              Autocompute Value Bounds:
+                Max Value: 7.091375827789307
+                Min Value: -1.7861844301223755
+                Value: true
+              Axis: X
+              Channel Name: intensity
+              Class: rviz_default_plugins/LaserScan
+              Color: 255; 0; 0
+              Color Transformer: FlatColor
+              Decay Time: 0
+              Enabled: false
+              Invert Rainbow: false
+              Max Color: 255; 255; 255
+              Max Intensity: 4096
+              Min Color: 0; 0; 0
+              Min Intensity: 0
+              Name: Opponent Scan
+              Position Transformer: XYZ
+              Selectable: true
+              Size (Pixels): 3
+              Size (m): 0.05000000074505806
+              Style: Flat Squares
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Best Effort
+                Value: /opp_scan
+              Use Fixed Frame: true
+              Use rainbow: true
+              Value: false
+            - Alpha: 1
+              Class: rviz_default_plugins/RobotModel
+              Collision Enabled: false
+              Description File: ""
+              Description Source: Topic
+              Description Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /opp_robot_description
+              Enabled: true
+              Links:
+                All Links Enabled: true
+                Expand Joint Details: false
+                Expand Link Details: false
+                Expand Tree: false
+                Link Tree Style: Links in Alphabetic Order
+                opp_racecar/back_left_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                opp_racecar/back_right_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                opp_racecar/base_link:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                opp_racecar/front_left_hinge:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                opp_racecar/front_left_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                opp_racecar/front_right_hinge:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                opp_racecar/front_right_wheel:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+                opp_racecar/laser:
+                  Alpha: 1
+                  Show Axes: false
+                  Show Trail: false
+                  Value: true
+              Mass Properties:
+                Inertia: false
+                Mass: false
+              Name: Opponent Robot
+              TF Prefix: ""
+              Update Interval: 0
+              Value: true
+              Visual Enabled: true
+          Enabled: true
+          Name: Opponent Robot
       Enabled: true
-      Name: Avoidance / Overtaking
+      Name: PERCEPTION
     - Class: rviz_common/Group
       Displays:
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: true
-        Name: Recovery path
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/recovery/markers
-        Value: true
-      - Class: rviz_default_plugins/Marker
-        Enabled: true
-        Name: Recovery lookahead
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          Filter size: 10
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/recovery/lookahead_point
-        Value: true
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: false
-        Name: Recovery spline samples
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/recovery/spline_samples
-        Value: false
-      - Class: rviz_default_plugins/MarkerArray
-        Enabled: false
-        Name: Recovery checkpoints
-        Namespaces: {}
-        Topic:
-          Depth: 5
-          Durability Policy: Volatile
-          History Policy: Keep Last
-          Reliability Policy: Reliable
-          Value: /planner/recovery/checkpoints
-        Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Center line
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /centerline_waypoints/markers
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Global raceline
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /global_waypoints/markers
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Shortest path
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /global_waypoints/shortest_path/markers
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Track bounds
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /trackbounds/markers
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Speed sector markers
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /sector_markers
+          Value: false
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: OT sector markers
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /ot_sector_markers
+          Value: false
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: Pred start
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /opponent_predict/beginn
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: Pred end
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /opponent_predict/end
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: Opp pred
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /opponent_prediction_markerarray
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: Opp gp traj
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /opponent_traj_markerarray
+              Value: true
+          Enabled: true
+          Name: Prediction
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: Avoidance path
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/avoidance/markers
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: Avoidance (SQP / predictive)
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/avoidance/markers_sqp
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: Spline samples
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/avoidance/spline_samples
+              Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: false
+              Name: Considered obstacle
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/avoidance/considered_OBS
+              Value: false
+            - Class: rviz_default_plugins/Marker
+              Enabled: false
+              Name: Propagated obstacle
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/avoidance/propagated_obs
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: Start waypoints
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/start_wpnts/markers
+              Value: false
+          Enabled: true
+          Name: Avoidance / Overtaking
+        - Class: rviz_common/Group
+          Displays:
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: true
+              Name: Recovery path
+              Namespaces:
+                "": true
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/recovery/markers
+              Value: true
+            - Class: rviz_default_plugins/Marker
+              Enabled: true
+              Name: Recovery lookahead
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                Filter size: 10
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/recovery/lookahead_point
+              Value: true
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: Recovery spline samples
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/recovery/spline_samples
+              Value: false
+            - Class: rviz_default_plugins/MarkerArray
+              Enabled: false
+              Name: Recovery checkpoints
+              Namespaces:
+                {}
+              Topic:
+                Depth: 5
+                Durability Policy: Volatile
+                History Policy: Keep Last
+                Reliability Policy: Reliable
+                Value: /planner/recovery/checkpoints
+              Value: false
+          Enabled: true
+          Name: RECOVERY
       Enabled: true
-      Name: RECOVERY
-    Enabled: true
-    Name: PLANNER
-  - Class: rviz_common/Group
-    Displays:
-    - Class: rviz_default_plugins/MarkerArray
+      Name: PLANNER
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: MarkerArray
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /local_waypoints/markers
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Lookahead point (L1)
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lookahead_point
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Lookahead steering
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /lookahead_steering
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: false
+          Name: Future position
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /future_position
+          Value: false
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Trailing opponent
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /trailing_opponent_marker
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: Controller prediction
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /controller_prediction/markers
+          Value: false
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: FTG best point
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /best_points/marker
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: FTG best gap
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /best_gap/markers
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
+          Enabled: false
+          Name: FTG processed scan
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /scan_proc/markers
+          Value: false
       Enabled: true
-      Name: MarkerArray
-      Namespaces:
-        ? ''
-        : true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /local_waypoints/markers
-      Value: true
-    - Class: rviz_default_plugins/Marker
+      Name: CONTROL
+    - Class: rviz_common/Group
+      Displays:
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: State marker
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /state_marker
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Marker
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /emergency_marker
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: true
+          Name: Marker
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /state_machine/trailing_target
+          Value: true
+        - Class: rviz_default_plugins/Marker
+          Enabled: false
+          Name: Overtaking target
+          Namespaces:
+            {}
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            Filter size: 10
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /state_machine/overtaking_target
+          Value: false
       Enabled: true
-      Name: Lookahead point (L1)
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /lookahead_point
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: Lookahead steering
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /lookahead_steering
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: false
-      Name: Future position
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /future_position
-      Value: false
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: Trailing opponent
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /trailing_opponent_marker
-      Value: true
-    - Class: rviz_default_plugins/MarkerArray
-      Enabled: false
-      Name: Controller prediction
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /controller_prediction/markers
-      Value: false
-    Enabled: true
-    Name: CONTROL
-  - Class: rviz_common/Group
-    Displays:
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: State marker
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /state_marker
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: Marker
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /emergency_marker
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: true
-      Name: Marker
-      Namespaces:
-        ? ''
-        : true
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /state_machine/trailing_target
-      Value: true
-    - Class: rviz_default_plugins/Marker
-      Enabled: false
-      Name: Overtaking target
-      Namespaces: {}
-      Topic:
-        Depth: 5
-        Durability Policy: Volatile
-        Filter size: 10
-        History Policy: Keep Last
-        Reliability Policy: Reliable
-        Value: /state_machine/overtaking_target
-      Value: false
-    Enabled: true
-    Name: STATE MACHINE
+      Name: STATE MACHINE
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -804,38 +959,38 @@ Visualization Manager:
     Frame Rate: 30
   Name: root
   Tools:
-  - Class: rviz_default_plugins/Interact
-    Hide Inactive Objects: true
-  - Class: rviz_default_plugins/MoveCamera
-  - Class: rviz_default_plugins/Select
-  - Class: rviz_default_plugins/FocusCamera
-  - Class: rviz_default_plugins/Measure
-    Line color: 128; 128; 0
-  - Class: rviz_default_plugins/SetInitialPose
-    Covariance x: 0.25
-    Covariance y: 0.25
-    Covariance yaw: 0.06853891909122467
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      History Policy: Keep Last
-      Reliability Policy: Reliable
-      Value: /initialpose
-  - Class: rviz_default_plugins/SetGoal
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      History Policy: Keep Last
-      Reliability Policy: Reliable
-      Value: /goal_pose
-  - Class: rviz_default_plugins/PublishPoint
-    Single click: true
-    Topic:
-      Depth: 5
-      Durability Policy: Volatile
-      History Policy: Keep Last
-      Reliability Policy: Reliable
-      Value: /clicked_point
+    - Class: rviz_default_plugins/Interact
+      Hide Inactive Objects: true
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/FocusCamera
+    - Class: rviz_default_plugins/Measure
+      Line color: 128; 128; 0
+    - Class: rviz_default_plugins/SetInitialPose
+      Covariance x: 0.25
+      Covariance y: 0.25
+      Covariance yaw: 0.06853891909122467
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /initialpose
+    - Class: rviz_default_plugins/SetGoal
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /goal_pose
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /clicked_point
   Transformation:
     Current:
       Class: rviz_default_plugins/TF
@@ -852,27 +1007,27 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 29.339412689208984
+      Scale: 34.72664260864258
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
-      X: 6.1589179039001465
-      Y: 6.005514144897461
-    Saved: null
+      X: -3.6870789527893066
+      Y: 3.108307361602783
+    Saved: ~
 Window Geometry:
   Displays:
     collapsed: false
-  Height: 1011
+  Height: 1043
   Hide Left Dock: false
   Hide Right Dock: false
-  QMainWindow State: 000000ff00000000fd00000004000000000000015600000399fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d000001f7000000c900fffffffb0000000a00560069006500770073010000023a0000019c000000a400fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000014000000399fc0200000004fb0000000e00700069007400770061006c006c010000003d000003990000024b00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001600530069006d00200043006f006e00740072006f006c010000003d000002930000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004420000003efc0100000002fb0000000800540069006d00650100000000000004420000000000000000fb0000000800540069006d006501000000000000045000000000000000000000049c0000039900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  QMainWindow State: 000000ff00000000fd000000040000000000000156000003b9fc0200000009fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c006100790073010000003d00000209000000c900fffffffb0000000a00560069006500770073010000024c000001aa000000a400fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c000002610000000100000140000003b9fc0200000004fb0000000e00700069007400770061006c006c010000003d000003b90000024a00fffffffb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000001600530069006d00200043006f006e00740072006f006c010000003d000002930000000000000000fb0000001200530065006c0065006300740069006f006e010000025a000000b200000000000000000000000200000490000000a9fc0100000001fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000004420000003efc0100000002fb0000000800540069006d00650100000000000004420000000000000000fb0000000800540069006d00650100000000000004500000000000000000000004de000003b900000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Selection:
     collapsed: false
   Tool Properties:
     collapsed: false
   Views:
     collapsed: false
-  Width: 1854
-  X: 1986
-  Y: 32
+  Width: 1920
+  X: 3000
+  Y: 492
   pitwall:
     collapsed: false
