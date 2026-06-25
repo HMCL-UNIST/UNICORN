@@ -37,6 +37,14 @@ L1_PARAMS = [
     'speed_diff_thres', 'start_speed', 'start_curvature_factor',
 ]
 
+# FTG params live-tunable via rqt (controller.yaml). Mapped onto the FTG instance
+# in dyn_param_cb. Disparity-extender tunables are in metres/degrees.
+FTG_PARAMS = [
+    'ftg_debug', 'ftg_max_lidar_dist', 'ftg_max_speed', 'ftg_track_width',
+    'ftg_front_fov_deg', 'ftg_smooth_deg', 'ftg_disp_thresh', 'ftg_bubble_m',
+    'ftg_steer_ema', 'ftg_max_steer',
+]
+
 
 class ControllerManager(Node):
     """ROS2 port of the ROS1 unicorn controller_manager (Pure-Pursuit only; the
@@ -118,11 +126,15 @@ class ControllerManager(Node):
             node=self,
             mapping=False,
             debug=self._get_param('ftg_debug', False),
-            safety_radius=int(self._get_param('ftg_safety_radius', 10)),
             max_lidar_dist=self._get_param('ftg_max_lidar_dist', 10.0),
             max_speed=self._get_param('ftg_max_speed', 1.5),
-            range_offset=int(self._get_param('ftg_range_offset', 0)),
             track_width=self._get_param('ftg_track_width', 2.0),
+            front_fov_deg=self._get_param('ftg_front_fov_deg', 90.0),
+            smooth_deg=self._get_param('ftg_smooth_deg', 1.0),
+            disp_thresh=self._get_param('ftg_disp_thresh', 0.5),
+            bubble_m=self._get_param('ftg_bubble_m', 0.30),
+            steer_ema=self._get_param('ftg_steer_ema', 0.0),
+            max_steer=self._get_param('ftg_max_steer', 0.4),
         )
 
         # Subscribers
@@ -211,9 +223,38 @@ class ControllerManager(Node):
                 setattr(self, name, param.value)
                 if self.controller is not None:
                     setattr(self.controller, name, param.value)
+            elif name in FTG_PARAMS:
+                self._apply_ftg_param(name, param.value)
             elif name == 'save_params' and param.value:
                 self._save_requested = True
         return SetParametersResult(successful=True)
+
+    def _apply_ftg_param(self, name, value):
+        """Live-update an ftg_* param on the FTG instance (rqt tuning)."""
+        if self.ftg_controller is None:
+            return
+        f = self.ftg_controller
+        if name == 'ftg_debug':
+            f.DEBUG = bool(value)
+        elif name == 'ftg_max_lidar_dist':
+            f.MAX_LIDAR_DIST = float(value)
+        elif name == 'ftg_track_width':
+            f.track_width = float(value)
+        elif name == 'ftg_front_fov_deg':
+            f.FRONT_FOV = np.radians(float(value) / 2.0)   # param = TOTAL front FOV
+        elif name == 'ftg_smooth_deg':
+            f.SMOOTH_RAD = np.radians(float(value))
+        elif name == 'ftg_disp_thresh':
+            f.DISP_THRESH = float(value)
+        elif name == 'ftg_bubble_m':
+            f.BUBBLE_M = float(value)
+        elif name == 'ftg_steer_ema':
+            f.STEER_EMA = float(value)
+        elif name == 'ftg_max_steer':
+            f.MAX_STEER = float(value)
+        elif name == 'ftg_max_speed':
+            f.MAX_SPEED = float(value)
+            f.recompute_speeds()
 
     def save_yaml(self):
         if not self.save_yaml_path:
@@ -225,8 +266,12 @@ class ControllerManager(Node):
                 with open(self.save_yaml_path, "r") as f:
                     data = yaml.safe_load(f) or {}
             params = {p: float(getattr(self, p)) for p in L1_PARAMS}
+            for p in FTG_PARAMS:                      # keep FTG tuning + current values
+                if self.has_parameter(p):
+                    params[p] = self.get_parameter(p).value
             params['save_params'] = False
-            data.setdefault('controller_manager', {})['ros__parameters'] = params
+            block = data.setdefault('controller_manager', {}).setdefault('ros__parameters', {})
+            block.update(params)                      # merge: don't drop other keys
             with open(self.save_yaml_path, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False)
             self.get_logger().info(f"controller params saved to: {self.save_yaml_path}")
@@ -336,7 +381,8 @@ class ControllerManager(Node):
         if self.scan is None:
             return
         speed, acceleration, jerk, steering_angle = 0, 0, 0, 0
-        speed, steering_angle = self.ftg_controller.process_lidar(self.scan.ranges)
+        speed, steering_angle = self.ftg_controller.process_lidar(
+            self.scan.ranges, self.scan.angle_min, self.scan.angle_increment)
         ack_msg = self.create_ack_msg(speed, acceleration, jerk, steering_angle)
         self.drive_pub.publish(ack_msg)
 
@@ -368,7 +414,8 @@ class ControllerManager(Node):
         return speed, acceleration, jerk, steering_angle
 
     def ftg_cycle(self):
-        speed, steer = self.ftg_controller.process_lidar(self.scan.ranges)
+        speed, steer = self.ftg_controller.process_lidar(
+            self.scan.ranges, self.scan.angle_min, self.scan.angle_increment)
         self.get_logger().warning(f"[{self.name}] FTGONLY!!!")
         return speed, steer
 

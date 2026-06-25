@@ -1,328 +1,221 @@
 #!/usr/bin/env python3
+"""Follow-The-Gap (disparity-extender). Beam/FOV independent: all thresholds in
+metres/radians, so one tuning works on the 2160-beam sim and the ~1080-beam car.
+Per scan: sanitize NaN->max, window the front +-FRONT_FOV, smooth, mask returns
+within track_width/2, bubble each >=DISP_THRESH disparity, take the largest free
+gap, aim at its centre, EMA-smooth the steer."""
 import math
 import numpy as np
 from visualization_msgs.msg import Marker, MarkerArray
 
 
 class FTG:
-    # Lidar processing params (the speed/steer thresholds are state-independent
-    # constants; MAX_SPEED-derived speeds are computed in __init__ since the ROS1
-    # rospy.get_param class-body reads are now constructor args injected by the
-    # manager).
-    PREPROCESS_CONV_SIZE = 3
+    # speed-scheduling thresholds on |steer| [rad]
+    STRAIGHTS_STEERING_ANGLE = np.pi / 18   # 10 deg
+    MILD_CURVE_ANGLE = np.pi / 6            # 30 deg
+    ULTRASTRAIGHTS_ANGLE = np.pi / 60       # 3 deg
 
-    # Steering params
-    STRAIGHTS_STEERING_ANGLE = np.pi / 18  # 10 degrees
-    MILD_CURVE_ANGLE = np.pi / 6  # 30 degrees
-    ULTRASTRAIGHTS_ANGLE = np.pi / 60  # 3 deg
+    # disparity-extender tunables: DEFAULTS, overridden from controller.yaml (ftg_*)
+    # and live-tunable via rqt.
+    FRONT_FOV = math.radians(45.0)    # HALF-angle [rad] = ftg_front_fov_deg/2 (total 90 deg)
+    SMOOTH_RAD = math.radians(1.0)    # scan smoothing window [rad]     (ftg_smooth_deg)
+    DISP_THRESH = 0.5                 # range jump = discontinuity [m]  (ftg_disp_thresh)
+    BUBBLE_M = 0.30                   # safety bubble per disparity [m] (ftg_bubble_m)
+    STEER_EMA = 0.0                   # steer low-pass a: s=a*prev+(1-a)*new (ftg_steer_ema)
+    MAX_STEER = 0.4                   # steering clip [rad]             (ftg_max_steer)
+    SPEED_SCALE = 1.0                 # overall speed multiplier
 
-    def __init__(self, node=None, mapping=False,
-                 debug=False, safety_radius=None, max_lidar_dist=None,
-                 max_speed=1.5, range_offset=None, track_width=2.0) -> None:
-        """
-        Initialize the FTG controller.
-
-        Parameters:
-            node: the ROS2 node (used for marker publishers + clock); may be None.
-            mapping (bool): Flag indicating whether FTG is used for mapping or not.
-            debug/safety_radius/max_lidar_dist/max_speed/range_offset/track_width:
-                ROS1 read these from /state_machine/* params at class-body /
-                constructor time; the manager now injects them.
-        """
+    def __init__(self, node=None, mapping=False, debug=False,
+                 safety_radius=None, max_lidar_dist=None, max_speed=1.5,
+                 range_offset=None, track_width=2.0,
+                 front_fov_deg=None, smooth_deg=None, disp_thresh=None,
+                 bubble_m=None, steer_ema=None, max_steer=None) -> None:
         self.node = node
         self.mapping = mapping
 
-        # --- params injected by the manager (ROS1: rospy.get_param) ---
         self.DEBUG = debug
-        self.SAFETY_RADIUS = safety_radius
-        self.MAX_LIDAR_DIST = max_lidar_dist
+        self.SAFETY_RADIUS = safety_radius          # accepted for compat (unused)
+        self.range_offset = range_offset            # accepted for compat (unused)
+        self.MAX_LIDAR_DIST = max_lidar_dist if max_lidar_dist else 10.0
         self.MAX_SPEED = max_speed
-
-        # Speed params (ROS1 computed these as class vars from MAX_SPEED)
-        scale = 0.6  # .575 is  max
-        self.CORNERS_SPEED = 0.3 * self.MAX_SPEED * scale
-        self.MILD_CORNERS_SPEED = 0.45 * self.MAX_SPEED * scale
-        self.STRAIGHTS_SPEED = 0.8 * self.MAX_SPEED * scale
-        self.ULTRASTRAIGHTS_SPEED = self.MAX_SPEED * scale
-
-        self.radians_per_elem = None  # used when calculating the angles of the LiDAR data
-        self.range_offset = range_offset
         self.track_width = track_width
 
-        self.velocity = 0
-        self.scan = None
+        # override class-default tunables from yaml when provided
+        if front_fov_deg is not None:
+            self.FRONT_FOV = math.radians(float(front_fov_deg) / 2.0)  # param = TOTAL front FOV
+        if smooth_deg is not None:
+            self.SMOOTH_RAD = math.radians(float(smooth_deg))
+        if disp_thresh is not None:
+            self.DISP_THRESH = float(disp_thresh)
+        if bubble_m is not None:
+            self.BUBBLE_M = float(bubble_m)
+        if steer_ema is not None:
+            self.STEER_EMA = float(steer_ema)
+        if max_steer is not None:
+            self.MAX_STEER = float(max_steer)
 
-        self.best_pnt = None
-        self.scan_pub = None
-        self.best_gap = None
+        self.recompute_speeds()
+
+        self.velocity = 0.0
+        self._steer_prev = None
+        self.angle_min = -0.75 * np.pi
+        self.angle_inc = None
+        self.radians_per_elem = None
+
+        self.best_pnt = self.scan_pub = self.best_gap = None
         if self.node is not None:
             self.best_pnt = self.node.create_publisher(Marker, '/best_points/marker', 10)
             self.scan_pub = self.node.create_publisher(MarkerArray, '/scan_proc/markers', 10)
             self.best_gap = self.node.create_publisher(MarkerArray, '/best_gap/markers', 10)
 
+    def recompute_speeds(self) -> None:
+        s = self.SPEED_SCALE
+        self.CORNERS_SPEED = 0.3 * self.MAX_SPEED * s
+        self.MILD_CORNERS_SPEED = 0.45 * self.MAX_SPEED * s
+        self.STRAIGHTS_SPEED = 0.8 * self.MAX_SPEED * s
+        self.ULTRASTRAIGHTS_SPEED = self.MAX_SPEED * s
+
+    def set_vel(self, velocity) -> None:
+        self.velocity = velocity
+
     def _now(self):
         return self.node.get_clock().now().to_msg() if self.node is not None else None
 
-    def _preprocess_lidar(self, ranges) -> np.ndarray:
-        """
-        Preprocess the LiDAR scan array.
+    def _bubble_beams(self, near_range) -> int:
+        near = max(float(near_range), 0.05)
+        return int(math.ceil(math.atan2(self.BUBBLE_M, near) / self.angle_inc))
 
-        This method performs preprocessing on the LiDAR scan array. The preprocessing steps include:
-        1. Setting each value to the mean over a specified window.
-        2. Rejecting high values (e.g., values greater than 3m).
-
-        Parameters:
-            ranges (numpy.ndarray): The LiDAR scan array.
-
-        Returns:
-            numpy.ndarray: The preprocessed LiDAR scan array.
-        """
-        self.radians_per_elem = (1.5 * np.pi) / len(ranges)
-        # we won't use the LiDAR data from directly behind us
-        # full angle is -135 135
-        # every point in the array is
-        proc_ranges = np.array(ranges[self.range_offset:-self.range_offset])
-        # sets each value to the mean over a given window to smoothen the signal
-        proc_ranges = np.convolve(proc_ranges, np.ones(self.PREPROCESS_CONV_SIZE)/self.PREPROCESS_CONV_SIZE, 'valid')
-        # clip the ranges between 0 and your maximum lidar distance
-        proc_ranges = np.clip(proc_ranges, 0, self.MAX_LIDAR_DIST)
-        # reverse lidar because it is right to left
-        return proc_ranges[::-1]
-
-    def _get_steer_angle(self, point_x, point_y) -> float:
-        """
-        Get the angle of a particular element in the LiDAR data and
-        transform it into an appropriate steering angle.
-
-        Parameters:
-            point_x (float): The x-coordinate of the LiDAR data point
-            point_y (float): The y-coordinate of the LiDAR data point
-
-        Returns:
-            float: The transformed steering angle
-
-        """
-        steering_angle = math.atan2(point_y, point_x)
-        return np.clip(steering_angle, -0.4, 0.4)
-
-    def _get_best_range_point(self, proc_ranges) -> tuple:
-        """
-        Find the best point i.e. the middle of the largest gap within the bubble radius.
-
-        Parameters:
-            proc_ranges (list): List of processed ranges.
-
-        Returns:
-            tuple: The x and y coordinates of the best point.
-        """
-        #Get the bubble radius
-        radius = self._get_radius()
-
-        #Find the largest gap
-        gap_left, gap_right = self._find_largest_gap(ranges=proc_ranges, radius=radius)
-        gap_left += self.range_offset - 180
-        gap_right += self.range_offset - 180
-        gap_middle = int((gap_right + gap_left) / 2)
-        #Calculate cartesian point of the best point position from the lidar measurements in laser frame
-        best_y = np.cos(gap_middle * self.radians_per_elem) * radius
-        best_x = np.sin(gap_middle * self.radians_per_elem) * radius
-
-        if self.DEBUG:
-            #Delete old gaps from RVIZ
-            self._delete_gap_markers()
-
-            #Visualise the gap
-            gap_markers = MarkerArray()
-            for i in range(gap_left, gap_right):
-                mrk = Marker()
-                mrk.header.frame_id = 'laser'
-                mrk.header.stamp = self._now()
-                mrk.type = mrk.SPHERE
-                mrk.scale.x = 0.05
-                mrk.scale.y = 0.05
-                mrk.scale.z = 0.05
-                mrk.color.a = 1.0
-                mrk.color.r = 1.0
-                mrk.color.g = 1.0
-                mrk.id = i - gap_left
-                #Calculate cartesian point of the gap  marker position from the lidar measurements in laser frame
-                mrk.pose.position.y = math.cos(i * self.radians_per_elem) * radius
-                mrk.pose.position.x = math.sin(i * self.radians_per_elem) * radius
-                mrk.pose.orientation.w = 1.0
-                gap_markers.markers.append(mrk)
-            self.best_gap.publish(gap_markers)
-
-            # visualize best point aka middle of the gap
-            best_mrk = Marker()
-            best_mrk.header.frame_id = 'laser'
-            best_mrk.header.stamp = self._now()
-            best_mrk.type = best_mrk.SPHERE
-            best_mrk.scale.x = 0.2
-            best_mrk.scale.y = 0.2
-            best_mrk.scale.z = 0.2
-            best_mrk.color.a = 1.0
-            best_mrk.color.b = 1.0
-            best_mrk.color.g = 1.0
-            best_mrk.id = 0
-            best_mrk.pose.position.y = best_y
-            best_mrk.pose.position.x = best_x
-            best_mrk.pose.orientation.w = 1.0
-            self.best_pnt.publish(best_mrk)
-
-        return best_x, best_y
-
-    def process_lidar(self, ranges) -> tuple:
-        """
-        Process each LiDAR scan as per the Follow Gap algorithm &
-        calculate the speed and steering angle.
-
-        Parameters:
-            ranges (list): List of LiDAR scan ranges
-
-        Returns:
-            tuple: A tuple containing the speed and steering angle
-        """
-        #Preprocess the LiDAR to smoothen it
-        proc_ranges = self._preprocess_lidar(ranges)
-
-        proc_ranges = self._safety_border(proc_ranges)
-
-        if self.DEBUG:
-            scan_markers = MarkerArray()
-            for i, scan in enumerate(proc_ranges):
-                mrk = Marker()
-                mrk.header.frame_id = 'laser'
-                mrk.header.stamp = self._now()
-                mrk.type = mrk.SPHERE
-                mrk.scale.x = 0.05
-                mrk.scale.y = 0.05
-                mrk.scale.z = 0.05
-                mrk.color.a = 1.0
-                mrk.color.r = 1.0
-                mrk.color.b = 1.0
-
-                mrk.id = i
-                mrk.pose.position.x = math.sin(i * self.radians_per_elem) * scan
-                mrk.pose.position.y = math.cos(i * self.radians_per_elem) * scan
-                mrk.pose.orientation.w = 1.0
-                scan_markers.markers.append(mrk)
-            self.scan_pub.publish(scan_markers)
-
-        #Get best point to target aka middle of the largest gap
-        best_x, best_y = self._get_best_range_point(proc_ranges)
-
-        #Get steer angle from best points
-        steering_angle = self._get_steer_angle(point_x=best_x, point_y=best_y)
-
-        if self.mapping:
-            speed = 1.5
+    def process_lidar(self, ranges, angle_min=None, angle_increment=None) -> tuple:
+        """Returns (speed, steering_angle). angle_min/angle_increment from the
+        LaserScan make it beam/FOV independent; if omitted a 270-deg FOV is assumed."""
+        n = len(ranges)
+        if angle_increment is not None and angle_increment > 0.0:
+            self.angle_inc = float(angle_increment)
+            self.angle_min = float(angle_min) if angle_min is not None else -(n - 1) * self.angle_inc / 2.0
         else:
-            if abs(steering_angle) > self.MILD_CURVE_ANGLE:
-                speed = self.CORNERS_SPEED
-            elif abs(steering_angle) > self.STRAIGHTS_STEERING_ANGLE:
-                speed = self.MILD_CORNERS_SPEED
-            elif abs(steering_angle) > self.ULTRASTRAIGHTS_ANGLE:
-                speed = self.STRAIGHTS_SPEED
+            self.angle_inc = (1.5 * np.pi) / n
+            self.angle_min = -(n - 1) * self.angle_inc / 2.0
+        self.radians_per_elem = self.angle_inc
+
+        # NaN/inf == no return == open -> max range, then clip
+        r = np.asarray(ranges, dtype=float)
+        r = np.where(np.isfinite(r), r, self.MAX_LIDAR_DIST)
+        r = np.clip(r, 0.0, self.MAX_LIDAR_DIST)
+
+        # front FOV window (angle-based)
+        i_lo = max(0, int(math.ceil((-self.FRONT_FOV - self.angle_min) / self.angle_inc)))
+        i_hi = min(n, int(math.floor((self.FRONT_FOV - self.angle_min) / self.angle_inc)) + 1)
+        if i_hi - i_lo < 3:
+            return self._speed_for(0.0), 0.0
+        proc = r[i_lo:i_hi].copy()
+        base_angle = self.angle_min + i_lo * self.angle_inc
+
+        # smoothing window sized in radians
+        w = max(1, int(round(self.SMOOTH_RAD / self.angle_inc)))
+        if w > 1:
+            proc = np.convolve(proc, np.ones(w) / w, 'same')
+
+        # mask returns within half the track width (too close = wall/self)
+        free = proc >= (self.track_width / 2.0)
+
+        # disparity extender: bubble the near side of each >DISP_THRESH jump
+        d = np.diff(proc)
+        L = len(proc)
+        for i in np.where(np.abs(d) > self.DISP_THRESH)[0]:
+            if d[i] > 0:
+                b = self._bubble_beams(proc[i])
+                free[i + 1: min(L, i + 1 + b)] = False
             else:
-                speed = self.ULTRASTRAIGHTS_SPEED
+                b = self._bubble_beams(proc[i + 1])
+                free[max(0, i + 1 - b): i + 1] = False
 
-        return speed, steering_angle
+        # largest contiguous free run; fall back to farthest point
+        gl, gr = self._largest_run(free)
+        mid = (gl + gr) // 2 if gr > gl else int(np.argmax(proc))
 
-    def _find_largest_gap(self, ranges, radius) -> tuple:
-        """
-        Find the index of the starting and ending of the largest gap and its width
+        # steer toward the gap centre (0 = forward, + = left), then EMA-smooth
+        raw_steer = float(np.clip(base_angle + mid * self.angle_inc,
+                                  -self.MAX_STEER, self.MAX_STEER))
+        if self._steer_prev is None:
+            steer = raw_steer
+        else:
+            a = self.STEER_EMA
+            steer = a * self._steer_prev + (1.0 - a) * raw_steer
+        self._steer_prev = steer
 
-        Parameters:
-            ranges (numpy.ndarray): Array of range values
-            radius (float): Threshold radius value
+        if self.DEBUG:
+            self._publish_debug(proc, base_angle, gl, gr, mid)
+        return self._speed_for(steer), steer
 
-        Returns:
-            tuple: A tuple containing the index of the starting of the largest gap,
-                    the index of the ending of the largest gap, and the width of the largest gap.
+    @staticmethod
+    def _largest_run(mask) -> tuple:
+        if not mask.any():
+            return 0, 0
+        edges = np.where(np.diff(np.concatenate(([0], mask.view(np.int8), [0]))))[0]
+        starts, ends = edges[0::2], edges[1::2]
+        k = int(np.argmax(ends - starts))
+        return int(starts[k]), int(ends[k]) - 1
 
-        """
-        #Binarise the ranges in zeros for values under the radius threshold and ones for above and equal
-        bin_ranges = np.where(ranges >= radius, 1, 0)
+    def _speed_for(self, steering_angle) -> float:
+        if self.mapping:
+            return 1.5
+        a = abs(steering_angle)
+        if a > self.MILD_CURVE_ANGLE:
+            return self.CORNERS_SPEED
+        if a > self.STRAIGHTS_STEERING_ANGLE:
+            return self.MILD_CORNERS_SPEED
+        if a > self.ULTRASTRAIGHTS_ANGLE:
+            return self.STRAIGHTS_SPEED
+        return self.ULTRASTRAIGHTS_SPEED
 
-        #Get largest gap from binary ranges
-        bin_diffs = np.abs(np.diff(bin_ranges))
-        bin_diffs[0] = 1
-        bin_diffs[-1] = 1
+    def _publish_debug(self, proc, base_angle, gl, gr, mid) -> None:
+        clr = MarkerArray()
+        m = Marker(); m.header.frame_id = 'laser'; m.header.stamp = self._now()
+        m.action = Marker.DELETEALL
+        clr.markers.append(m)
+        self.best_gap.publish(clr)
 
-        diff_idxs = bin_diffs.nonzero()[0]
-        #Check that binarised ranges are positive
-        high_gaps = []
-        for i in range(len(diff_idxs)-1):
-            low = diff_idxs[i]
-            high = diff_idxs[i+1]
-            high_gaps.append(np.mean(bin_ranges[low:high]) > 0.5)
+        gap_markers = MarkerArray()
+        for i in range(gl, max(gl + 1, gr)):
+            ang = base_angle + i * self.angle_inc
+            rng = float(proc[i]) if i < len(proc) else 1.0
+            mrk = Marker()
+            mrk.header.frame_id = 'laser'; mrk.header.stamp = self._now()
+            mrk.type = mrk.SPHERE
+            mrk.scale.x = mrk.scale.y = mrk.scale.z = 0.05
+            mrk.color.a = 1.0; mrk.color.r = 1.0; mrk.color.g = 1.0
+            mrk.id = i - gl
+            mrk.pose.position.x = math.cos(ang) * rng
+            mrk.pose.position.y = math.sin(ang) * rng
+            mrk.pose.orientation.w = 1.0
+            gap_markers.markers.append(mrk)
+        self.best_gap.publish(gap_markers)
 
-        gap_left = diff_idxs[np.argmax(high_gaps * np.diff(diff_idxs))]
-        gap_width = np.max(high_gaps * np.diff(diff_idxs))
-        gap_right = gap_left + gap_width
+        ang = base_angle + mid * self.angle_inc
+        rng = float(proc[mid]) if mid < len(proc) else 1.0
+        bm = Marker()
+        bm.header.frame_id = 'laser'; bm.header.stamp = self._now()
+        bm.type = bm.SPHERE
+        bm.scale.x = bm.scale.y = bm.scale.z = 0.2
+        bm.color.a = 1.0; bm.color.b = 1.0; bm.color.g = 1.0
+        bm.id = 0
+        bm.pose.position.x = math.cos(ang) * rng
+        bm.pose.position.y = math.sin(ang) * rng
+        bm.pose.orientation.w = 1.0
+        self.best_pnt.publish(bm)
 
-        return gap_left, gap_right
-
-    def _get_radius(self) -> float:
-        """
-        Calculate the radius based on the track width and velocity.
-
-        Returns:
-            float: The calculated radius.
-        """
-        # Empirically determined that this radius choosing makes sense
-        return min(5., self.track_width / 2 + 2 * (self.velocity / self.MAX_SPEED))
-
-    def set_vel(self, velocity) -> None:
-        """
-        Set the velocity of the car.
-
-        Parameters:
-            velocity (float): The desired velocity value.
-        """
-        self.velocity = velocity
-
-    def _safety_border(self, ranges) -> np.ndarray:
-        """
-        Add a safety bubble if there is a big increase in the range between two points.
-
-        Parameters:
-            ranges (list): List of range values.
-
-        Returns:
-            np.ndarray: Array of filtered range values.
-        """
-        filtered = list(ranges)
-        ranges_len = len(ranges)
-        i = 0
-        while i < ranges_len - 1:
-            if ranges[i + 1] - ranges[i] > 0.5:
-                for j in range(self.SAFETY_RADIUS):
-                    if i + j < ranges_len:
-                        filtered[i + j] = ranges[i]
-                i += self.SAFETY_RADIUS - 2
-            i += 1
-        # in other direction
-        i = ranges_len - 1
-        while i > 0:
-            if ranges[i - 1] - ranges[i] > 0.5:
-                for j in range(self.SAFETY_RADIUS):
-                    if i - j >= 0:
-                        filtered[i - j] = ranges[i]
-                i = i - self.SAFETY_RADIUS + 2
-            i -= 1
-        return np.array(filtered)
-
-    def _delete_gap_markers(self) -> None:
-        """
-        Delete marker for rviz when not needed
-        """
-        del_mrk_array = MarkerArray()
-        for i in range(1):
-            del_mrk = Marker()
-            del_mrk.header.frame_id = 'laser'
-            del_mrk.header.stamp = self._now()
-            del_mrk.action = del_mrk.DELETEALL
-            del_mrk.id = i
-            del_mrk_array.markers.append(del_mrk)
-        self.best_gap.publish(del_mrk_array)
+        sm = MarkerArray()
+        step = max(1, len(proc) // 360)
+        for i in range(0, len(proc), step):
+            ang = base_angle + i * self.angle_inc
+            mrk = Marker()
+            mrk.header.frame_id = 'laser'; mrk.header.stamp = self._now()
+            mrk.type = mrk.SPHERE
+            mrk.scale.x = mrk.scale.y = mrk.scale.z = 0.05
+            mrk.color.a = 1.0; mrk.color.r = 1.0; mrk.color.b = 1.0
+            mrk.id = i
+            mrk.pose.position.x = math.cos(ang) * float(proc[i])
+            mrk.pose.position.y = math.sin(ang) * float(proc[i])
+            mrk.pose.orientation.w = 1.0
+            sm.markers.append(mrk)
+        self.scan_pub.publish(sm)
