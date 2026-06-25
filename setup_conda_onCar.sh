@@ -87,6 +87,21 @@ pip install -e ./race_utils/unicorn_gym/f1tenth_gym                             
 pip install --no-build-isolation -e ./race_utils/raycaster/range_libc/pywrapper # range_libc
 pip install "git+https://github.com/ForzaETH/CCMA.git"                          # CCMA smoothing (dynamic-avoidance planners)
 
+# --- 4b. numpy — macOS only: swap the PyPI wheel for the conda-forge build ----
+# The pip layer above (scipy/numba deps) pulls the PyPI numpy wheel, which on
+# macOS links Apple's Accelerate BLAS (NEWLAPACK/ILP64) and then crashes at
+# import here: "Symbol not found: _cblas_caxpy$NEWLAPACK$ILP64 ... Accelerate".
+# Re-assert the conda-forge (OpenBLAS) build that RoboStack ships. No-op on Linux,
+# where the PyPI numpy wheel bundles its own OpenBLAS and works fine. Same swap
+# pattern as quadprog below, and MUST run before the quadprog import test (quadprog
+# imports numpy).
+if [ "$(uname)" = "Darwin" ]; then
+  say "macOS: restoring conda-forge numpy (pip pulled the Accelerate-linked PyPI wheel)…"
+  pip uninstall -y numpy 2>/dev/null || true
+  conda install -y --force-reinstall -c conda-forge "numpy=2.4"
+  python -c "import numpy" || { echo "ERROR: numpy still broken after conda-forge reinstall" >&2; exit 1; }
+fi
+
 # --- 5. quadprog — swap the broken PyPI wheel (MUST be after step 4) ---------
 # trajectory_planning_helpers re-pulls quadprog==0.1.7, whose wheel crashes the
 # state machine at import; the conda-forge build is correct + API-compatible.

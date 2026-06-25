@@ -25,7 +25,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
 # packages are intentionally NOT here (echo + submap RViz need them).
 CAR_ONLY=(sensor/urg_node \
           sensor/vesc/vesc_driver sensor/vesc/vesc_ackermann sensor/vesc/vesc \
-          state_estimation/particle_filter)
+          state_estimation)
 
 echo "==> marking car-only packages COLCON_IGNORE (sim/laptop build)…"
 for p in "${CAR_ONLY[@]}"; do

@@ -80,6 +80,17 @@ if [ -n "${ZSH_VERSION:-}" ]; then _urs_setup=setup.zsh; else _urs_setup=setup.b
 [ -f "$_URS_WS/install/$_urs_setup" ] && source "$_URS_WS/install/$_urs_setup"
 export RAYCASTER_DIR="$_URS_REPO/race_utils/raycaster"
 
+# --- macOS portability (no-op on Linux) ---
+# (1) Linux-only CLIs (taskset, ...) some launch files use via launch-prefix:
+#     put repo-tracked shims on PATH so they don't crash on macOS.
+# (2) ros2 launch spawns nodes with DYLD_* stripped by SIP, so they can't find the
+#     workspace rosidl typesupport dylibs in install/<pkg>/lib -> "type_support is
+#     null" deaths. Mirror them into $CONDA_PREFIX/lib (on the python rpath).
+if [ "$(uname)" = "Darwin" ]; then
+    export PATH="$_URS_REPO/.install_utils/macos-shims:$PATH"
+    URS_QUIET_LINK=1 bash "$_URS_REPO/.install_utils/macos_link_rosidl_typesupports.sh" "$_URS_WS" 2>/dev/null || true
+fi
+
 # --- 4) helpers ---
 # Kill every ROS 2 process (nodes, launchers, daemon), any package/language.
 ros2kill() {
@@ -101,7 +112,8 @@ cbuild() {
     [ $# -gt 0 ] && sel=(--packages-select "$@")
     ( cd "$_URS_WS" && colcon build "${sel[@]}" --symlink-install \
           --cmake-args -DCMAKE_BUILD_TYPE=Release ) \
-        && source "$_URS_WS/install/$_urs_setup"
+        && source "$_URS_WS/install/$_urs_setup" \
+        && bash "$_URS_REPO/.install_utils/macos_link_rosidl_typesupports.sh" "$_URS_WS"
 }
 
 echo "[unicorn] env ready  |  RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID  |  helpers: cbuild, ros2kill"

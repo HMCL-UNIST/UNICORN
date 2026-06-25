@@ -30,8 +30,12 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra)
 endif()
 
-# Allow multiple definitions of gflags
-add_link_options(-Wl,--allow-multiple-definition)
+# Allow multiple definitions of gflags.
+# `--allow-multiple-definition` is a GNU ld flag; Apple's ld (macOS) rejects it
+# as an unknown option, so only pass it where a GNU-compatible linker is used.
+if(NOT APPLE)
+  add_link_options(-Wl,--allow-multiple-definition)
+endif()
 
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
