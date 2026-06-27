@@ -45,15 +45,13 @@
       <remap from="/scan" to="$(var lidar_scan_out)"/>
     </node>
 
-    <!-- Static TF: base_link → laser -->
-    <node pkg="tf2_ros" exec="static_transform_publisher" name="base_to_laser_broadcaster"
-          args="--x 0.27 --y 0 --z 0.11 --qx 0 --qy 0 --qz 0 --qw 1 --frame-id base_link --child-frame-id laser"/>
-    <!-- Static TF: base_link -> vesc_imu (yaw +90 deg, Z axis same as base_link) -->
-    <node pkg="tf2_ros" exec="static_transform_publisher" name="base_to_vesc_imu_broadcaster"
-          args="--x 0 --y 0 --z 0.0 --roll 0 --pitch 0 --yaw 1.5707963 --frame-id base_link --child-frame-id vesc_imu"/>
-    <!-- Static TF: vesc_imu -> vesc_imu_rot (reverse yaw=-90 deg: same orientation as base_link) -->
-    <node pkg="tf2_ros" exec="static_transform_publisher" name="vesc_imu_to_rot_broadcaster"
-          args="--x 0 --y 0 --z 0 --roll 0 --pitch 0 --yaw -1.5707963 --frame-id vesc_imu --child-frame-id vesc_imu_rot"/>
+    <!-- Static TFs (base_link->laser, IMU frames) now come from per-vehicle config
+         so they can differ by SIM/CAR — edit config/CAR/static_transforms.yaml,
+         no launch change needed. config_dir is CAR here (this is the unless-sim
+         group); in sim base_link->laser comes from the gym URDF and there is no IMU. -->
+    <node pkg="stack_master" exec="static_tf_publisher.py" name="static_tf_publisher" output="screen">
+      <param from="$(var config_dir)/static_transforms.yaml"/>
+    </node>
 
   </group>
 

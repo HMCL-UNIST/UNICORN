@@ -25,6 +25,8 @@
   <arg name="ot_planner" default="predictive_spliner" description="overtake planner the state machine listens to (ROS1 default = predictive_spliner: listens to BOTH /planner/avoidance/otwpnts (dynamic) AND /planner/avoidance/static_otwpnts (static))"/>
   <arg name="control_topic" default="/local_waypoints"
        description="WpntArray the controller follows: /local_waypoints (state-machine output w/ avoidance) or /global_waypoints (robust raceline)"/>
+  <arg name="vis_lane_change" default="false"
+       description="Show lane_change_planner's matplotlib lane-visualization window at startup (blocks on plt.show()); off by default"/>
   <!-- sim -> SIM config (racecar_f110.ini + veh_dyn_info); real hardware -> CAR. Folder name == racecar_version. -->
   <let name="racecar_version" value="SIM" if="$(var sim)"/>
   <let name="racecar_version" value="CAR" unless="$(var sim)"/>
@@ -82,7 +84,9 @@
   </node>
 
   <!-- Dynamic avoidance (ROS1 Change mode) -> /planner/avoidance/otwpnts + /planner/avoidance/merger -->
-  <node pkg="lane_change_planner" exec="change_avoidance_node" name="planner_change" output="screen"/>
+  <node pkg="lane_change_planner" exec="change_avoidance_node" name="planner_change" output="screen">
+    <param name="vis" value="$(var vis_lane_change)"/>
+  </node>
   <node pkg="lane_change_planner" exec="update_waypoints" name="waypoint_updater" output="screen"/>
 
   <!-- ===== GP opponent-trajectory predictor =====

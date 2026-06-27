@@ -137,6 +137,12 @@ class ChangeAvoidanceNode(Node):
                                ParameterDescriptor(type=ParameterType.PARAMETER_BOOL))
         self.measure = self.get_parameter('measure').get_parameter_value().bool_value
 
+        # Show the matplotlib lane-visualization window in generate_lanes().
+        # Default OFF: it blocks on plt.show() at startup and pops a GUI window.
+        self.declare_parameter('vis', False,
+                               ParameterDescriptor(type=ParameterType.PARAMETER_BOOL))
+        self.vis = self.get_parameter('vis').get_parameter_value().bool_value
+
         # Dynamic reconfigure -> declared parameters with FloatingPointRange
         param_dicts = [
             {
@@ -734,23 +740,24 @@ class ChangeAvoidanceNode(Node):
             wpnt.ax_mps2 = 0.0
             self.inner_lane_wpnts_msg.wpnts.append(wpnt)
 
-        # ------------- Plot -------------
-        plt.figure(figsize=(8, 6))
-        plt.plot(original_center_wpnts[:, 0], original_center_wpnts[:, 1], 'k-', label='Center Line')
-        plt.plot(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1], 'g--', label='Outer Lane')
-        plt.plot(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1], 'b--', label='Inner Lane')
+        # ------------- Plot (only when vis:=true) -------------
+        if self.vis:
+            plt.figure(figsize=(8, 6))
+            plt.plot(original_center_wpnts[:, 0], original_center_wpnts[:, 1], 'k-', label='Center Line')
+            plt.plot(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1], 'g--', label='Outer Lane')
+            plt.plot(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1], 'b--', label='Inner Lane')
 
-        plt.scatter(original_center_wpnts[:, 0], original_center_wpnts[:, 1], c='k', s=10)
-        plt.scatter(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1], c='g', s=10)
-        plt.scatter(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1], c='b', s=10)
+            plt.scatter(original_center_wpnts[:, 0], original_center_wpnts[:, 1], c='k', s=10)
+            plt.scatter(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1], c='g', s=10)
+            plt.scatter(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1], c='b', s=10)
 
-        plt.axis('equal')
-        plt.xlabel('X [m]')
-        plt.ylabel('Y [m]')
-        plt.title('Lane Visualization')
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+            plt.axis('equal')
+            plt.xlabel('X [m]')
+            plt.ylabel('Y [m]')
+            plt.title('Lane Visualization')
+            plt.legend()
+            plt.grid(True)
+            plt.show()
         # ------------- Plot -------------
 
     ### Main Loop ###

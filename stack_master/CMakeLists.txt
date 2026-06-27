@@ -39,6 +39,7 @@ install(PROGRAMS
   scripts/map_relay_node.py
   scripts/keyboard_joy_node.py
   scripts/global_velocity_planner.py
+  scripts/static_tf_publisher.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

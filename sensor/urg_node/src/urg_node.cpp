@@ -109,7 +109,10 @@ void UrgNode::initSetup()
     echoes_pub_ =
       std::make_unique<laser_proc::LaserPublisher>(this->get_node_topics_interface(), 20);
   } else {
-    laser_pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>("scan", 20);
+    // Sensor data QoS (best_effort) so /scan is consistent with the sim publisher
+    // and the (best_effort) consumers; avoids reliable-retransmit latency buildup.
+    laser_pub_ = this->create_publisher<sensor_msgs::msg::LaserScan>(
+      "scan", rclcpp::SensorDataQoS());
   }
 
   status_service_ = this->create_service<std_srvs::srv::Trigger>(

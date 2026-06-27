@@ -1,0 +1,29 @@
+# Static transforms for the REAL car. Published by static_tf_publisher
+# (stack_master/scripts/static_tf_publisher.py), launched from low_level.launch.xml.
+# Edit values here — no launch change needed.
+/**:
+  ros__parameters:
+    transforms: [base_link_to_laser, base_link_to_vesc_imu_rot, vesc_imu_rot_to_vesc_imu]
+
+    # LiDAR mounting on the chassis.
+    base_link_to_laser:
+      parent: base_link
+      child: laser
+      xyz: [0.27, 0.0, 0.11]        # metres
+      rpy: [0.0, 0.0, 0.0]          # roll, pitch, yaw [rad]
+
+    # VESC IMU mounting, split so each quantity is specified ONCE (no redundant
+    # +90/-90 pair):
+    #   base_link    -> vesc_imu_rot : translation only (IMU position, base-aligned)
+    #   vesc_imu_rot -> vesc_imu     : rotation only    (IMU mounting orientation)
+    # Composition base->vesc_imu_rot->vesc_imu == the full base->vesc_imu mounting.
+    base_link_to_vesc_imu_rot:
+      parent: base_link
+      child: vesc_imu_rot
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 0.0]
+    vesc_imu_rot_to_vesc_imu:
+      parent: vesc_imu_rot
+      child: vesc_imu
+      xyz: [0.0, 0.0, 0.0]
+      rpy: [0.0, 0.0, 1.5707963]    # yaw +90 deg (IMU mounted rotated about Z)

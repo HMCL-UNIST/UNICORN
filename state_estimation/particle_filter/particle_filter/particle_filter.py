@@ -34,10 +34,11 @@ from particle_filter import utils as Utils
 # TF
 # import tf.transformations
 # import tf
-from tf2_ros import TransformBroadcaster
+from tf2_ros import TransformBroadcaster, Buffer, TransformListener
 import tf_transformations
 
 # messages
+from rclpy.qos import qos_profile_sensor_data
 from std_msgs.msg import String, Header, Float32MultiArray
 from sensor_msgs.msg import LaserScan
 from visualization_msgs.msg import Marker
@@ -171,6 +172,14 @@ class ParticleFiler(Node):
 
         if self.PUBLISH_ODOM:
             self.odom_pub = self.create_publisher(Odometry, '/pf/pose/odom', 1)
+            # MCL estimates the LASER pose; /pf/pose/odom must report the BASE_LINK
+            # pose (robot_localization fuses an odom pose as base_link's and ignores
+            # child_frame_id for the pose). Look up the static base_link->laser
+            # transform (lazily, once TF is up) to convert laser pose -> base_link.
+            self.tf_buffer = Buffer()
+            self.tf_listener = TransformListener(self.tf_buffer, self)
+            self.bl2laser = None          # (dx, dy, dyaw): laser expressed in base_link
+            self._bl2laser_warned = False
 
         # these topics are for coordinate space things
         if self.PUBLISH_TF:
@@ -181,7 +190,7 @@ class ParticleFiler(Node):
             LaserScan,
             self.get_parameter('scan_topic').value,
             self.lidarCB,
-            1)
+            qos_profile_sensor_data)
         self.odom_sub = self.create_subscription(
             Odometry,
             self.get_parameter('odometry_topic').value,
@@ -242,6 +251,44 @@ class ParticleFiler(Node):
         self.permissible_region[array_255==0] = 1
         self.map_initialized = True
 
+    def _ensure_bl2laser(self):
+        '''Lazily look up the static base_link->laser transform (laser pose in the
+        base_link frame) and cache it. Returns True once available.'''
+        if self.bl2laser is not None:
+            return True
+        try:
+            tf = self.tf_buffer.lookup_transform('base_link', 'laser', rclpy.time.Time())
+            t = tf.transform.translation
+            q = tf.transform.rotation
+            yaw = tf_transformations.euler_from_quaternion([q.x, q.y, q.z, q.w])[2]
+            self.bl2laser = (t.x, t.y, yaw)
+            self.get_logger().info(
+                f"[pf] base_link->laser offset = ({t.x:.3f}, {t.y:.3f}, {yaw:.3f} rad)")
+            return True
+        except Exception as e:
+            if not self._bl2laser_warned:
+                self.get_logger().warn(
+                    f"[pf] base_link->laser TF not available yet ({e}); "
+                    "publishing laser pose on /pf/pose/odom until it appears")
+                self._bl2laser_warned = True
+            return False
+
+    def _laser_pose_to_base_link(self, pose):
+        '''Convert a (x, y, yaw) LASER pose in map to the BASE_LINK pose in map,
+        using the cached static base_link->laser offset.
+        T_map_base = T_map_laser . (T_base_laser)^-1'''
+        dx, dy, dyaw = self.bl2laser
+        xl, yl, thl = pose[0], pose[1], pose[2]
+        c, s = np.cos(dyaw), np.sin(dyaw)
+        ix = -(c * dx + s * dy)            # inverse of base_link->laser
+        iy = -(-s * dx + c * dy)
+        ith = -dyaw
+        cl, sl = np.cos(thl), np.sin(thl)
+        xb = xl + cl * ix - sl * iy
+        yb = yl + sl * ix + cl * iy
+        thb = thl + ith
+        return xb, yb, thb
+
     def publish_tf(self, pose, stamp=None):
         ''' Publish a tf for the car. This tells ROS where the car is with respect to the map. '''
         if stamp == None:
@@ -265,13 +312,20 @@ class ParticleFiler(Node):
             self.pub_tf.sendTransform(t)
         # also publish odometry to facilitate getting the localization pose
         if self.PUBLISH_ODOM:
+            # pose is the LASER pose in map; convert to BASE_LINK so consumers
+            # (e.g. robot_localization, which fuses an odom pose as base_link's) get
+            # the correct frame. Falls back to the laser pose until the TF is up.
+            if self._ensure_bl2laser():
+                bx, by, byaw = self._laser_pose_to_base_link(pose)
+            else:
+                bx, by, byaw = pose[0], pose[1], pose[2]
             odom = Odometry()
             odom.header.stamp = self.get_clock().now().to_msg()
             odom.header.frame_id = 'map'
             odom.child_frame_id = 'base_link'
-            odom.pose.pose.position.x = pose[0]
-            odom.pose.pose.position.y = pose[1]
-            odom.pose.pose.orientation = Utils.angle_to_quaternion(pose[2])
+            odom.pose.pose.position.x = bx
+            odom.pose.pose.position.y = by
+            odom.pose.pose.orientation = Utils.angle_to_quaternion(byaw)
             cov_mat = np.cov(self.particles, rowvar=False, ddof=0, aweights=self.weights).flatten()
             odom.pose.covariance[:cov_mat.shape[0]] = cov_mat
             odom.twist.twist.linear.x = self.current_speed

@@ -2,6 +2,7 @@
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import Joy, LaserScan
 from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool
@@ -76,7 +77,7 @@ class SimpleMuxNode(Node):
         if self.use_estop:
             self.estop = EStop(self)
 
-            self.create_subscription(LaserScan, scan_topic, self._scan_cb, 10)
+            self.create_subscription(LaserScan, scan_topic, self._scan_cb, qos_profile_sensor_data)
             self.create_subscription(Odometry,  odom_topic, self._odom_cb, 10)
 
         self.drive_pub = self.create_publisher(AckermannDriveStamped, out_topic, 10)

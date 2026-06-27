@@ -1,0 +1,11 @@
+# Static transforms for SIM. In simulation, base_link->laser comes from the gym
+# robot_state_publisher (URDF) and there is NO IMU (gym_bridge publishes no Imu),
+# so there is nothing to publish here. Kept (empty) for symmetry with config/CAR
+# and as the place to add sim-specific static frames if ever needed.
+#
+# NOTE: low_level.launch.xml currently runs static_tf_publisher only in the
+# real-car (unless-sim) group, so this file is not loaded unless you also move
+# that node to run in sim.
+/**:
+  ros__parameters:
+    transforms: []
