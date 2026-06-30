@@ -162,7 +162,8 @@ class SectorSlicer(Node):
             self.sector_pnts.append(len(self.glb_wpnts.wpnts))
         # Create yaml with default speed scaling values
         n_sectors = len(self.sector_pnts) - 1
-        dict_file = {'global_limit': self.speed_scaling, 'n_sectors': n_sectors}
+        # save_params first so a freshly sliced map keeps the rqt save button (speed_sector_tuner reads it)
+        dict_file = {'save_params': False, 'global_limit': self.speed_scaling, 'n_sectors': n_sectors}
         for i in range(0, n_sectors):
             # Add sectors with scaling field
             dict_file['Sector' + str(i)] = {'start': self.sector_pnts[i] if i == 0 else self.sector_pnts[i] + 1,

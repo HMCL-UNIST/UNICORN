@@ -93,4 +93,12 @@
         name="frenet_odom_republisher" output="screen">
     <remap from="/car_state/frenet/odom" to="/car_state/odom_frenet"/>
   </node>
+
+  <!-- ===== Lap analyser =====
+       Lap times + lateral error + distance-to-boundary stats and RViz markers.
+       Needs /global_waypoints, /car_state/odom_frenet, /car_state/odom and
+       /state_marker (state machine) - all available once the stack is up. -->
+  <node pkg="lap_analyser" exec="lap_analyser" name="lap_analyser" output="screen">
+    <param name="loc_algo" value="$(var localization)"/>
+  </node>
 </launch>

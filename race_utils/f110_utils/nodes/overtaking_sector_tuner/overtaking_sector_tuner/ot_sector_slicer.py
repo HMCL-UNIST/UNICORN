@@ -172,6 +172,7 @@ class OvertakingSectorSlicer(Node):
 
         n_sectors = len(self.sector_pnts) - 1
         dict_file = {
+            'save_params': False,
             'n_sectors': n_sectors,
             'yeet_factor': 1.25,
             'spline_len': 30,

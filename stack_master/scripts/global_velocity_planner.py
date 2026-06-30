@@ -63,12 +63,12 @@ class VelocityPlanner(Node):
 
         # ---- tune here: hardcoded limits override the ini/csv values ----
         self.v_max = 12.0
-        self.ax_max_motor = 5.0
-        self.ax_max_brake = 5.0
+        self.ax_max_motor = 6.0
+        self.ax_max_brake = 8.0
         self.dyn_model_exp = 1.0
 
-        self.a_y_max = 2.0
-        self.a_x_max = 5.0
+        self.a_y_max = 6.0
+        self.a_x_max = 8.0
 
         self.ggv[:, 1] = self.a_x_max
         self.ggv[:, 2] = self.a_y_max

@@ -31,12 +31,16 @@ controller_manager:
     speed_diff_thres: 0.1
     start_speed: 10.0
     start_curvature_factor: 1.5
-    # FTG (FTGONLY state) - ROS1 /state_machine/* values; range_offset MUST be >0
-    # or FTG.process_lidar slices ranges[0:-0]=[] and crashes on entering FTGONLY.
-    ftg_debug: false
-    ftg_safety_radius: 40
-    ftg_max_lidar_dist: 9.0
-    ftg_max_speed: 6.0
-    ftg_range_offset: 180
-    ftg_track_width: 2.6
+    # FTG (FTGONLY state) - disparity-extender; all tunables in metres/degrees,
+    # live-tunable via rqt. Beam/FOV independent (no beam-count params).
+    ftg_debug: true
+    ftg_max_lidar_dist: 4.0      # NaN / no-return beams clipped to this [m]
+    ftg_max_speed: 2.0           # top speed; speed schedule scales off this [m/s]
+    ftg_track_width: 2.0         # returns closer than half this are ignored [m]
+    ftg_front_fov_deg: 80.0      # TOTAL front field of view considered [deg] (+-45)
+    ftg_smooth_deg: 1.0          # scan smoothing window width [deg]
+    ftg_disp_thresh: 0.5         # range jump that counts as a discontinuity [m]
+    ftg_bubble_m: 0.3            # safety bubble blown at each disparity [m]
+    ftg_steer_ema: 0.0           # steering low-pass 0..1 (0=off, higher=smoother)
+    ftg_max_steer: 0.4           # steering command clip [rad]
     save_params: false
