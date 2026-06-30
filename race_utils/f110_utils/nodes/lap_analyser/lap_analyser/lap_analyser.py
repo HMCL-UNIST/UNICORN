@@ -8,7 +8,6 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Pose, Point
 from visualization_msgs.msg import Marker
 
-from ament_index_python.packages import get_package_share_directory
 from collections import deque
 from copy import deepcopy
 import numpy as np
@@ -75,11 +74,10 @@ class LapAnalyser(Node):
         # New publisher for odom trajectory and other markers (unicorn-specific)
         self.lap_marker_pub = self.create_publisher(Marker, 'lap_marker', 5)
 
-        # Open up logfile
-        package_path = get_package_share_directory('lap_analyser')
-        ws_path = os.path.abspath(os.path.join(package_path, '..', '..', '..', '..'))
-        data_path = os.path.join(ws_path, 'data/lap_analyser')
-        self.get_logger().warn(data_path)
+        # Open up logfile (in the source package's data/ dir, matching ROS1)
+        pkg_root = os.path.realpath(os.path.join(os.path.dirname(__file__), '..'))
+        data_path = os.path.join(pkg_root, 'data')
+        self.get_logger().info(f"lap_analyser data dir: {data_path}")
         if not os.path.exists(data_path):
             os.makedirs(data_path)
 
