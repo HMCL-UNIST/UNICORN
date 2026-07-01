@@ -58,7 +58,7 @@ class OppTrajPredictor(PredictionNode):
         # Simulation parameters
         self.time_steps = 200
         self.dt = 0.02 # s
-        self.save_distance_front = 0.6 # m
+        self.save_distance_front = 3.0 # m
         self.save_distance_back = 0.4 # m
         self.max_v = 10 # m/s
         self.min_v = 0 # m/s
@@ -259,6 +259,24 @@ class OppTrajPredictor(PredictionNode):
         marker.color.b = b  # Blue
         return marker
 
+    def publish_begin_end_markers(self, beginn_s, beginn_d, end_s, end_d):
+        # Visualize the prediction endpoints. Watch out for wrap around.
+        stamp = self.get_clock().now().to_msg()
+
+        position_beginn = self.frenet2glob([beginn_s % self.max_s_updated], [beginn_d])
+        self.marker_beginn.header.stamp = stamp
+        self.marker_beginn.action = Marker.ADD
+        self.marker_beginn.pose.position.x = position_beginn.x[0]
+        self.marker_beginn.pose.position.y = position_beginn.y[0]
+        self.marker_pub_beginn.publish(self.marker_beginn)
+
+        position_end = self.frenet2glob([end_s % self.max_s_updated], [end_d])
+        self.marker_end.header.stamp = stamp
+        self.marker_end.action = Marker.ADD
+        self.marker_end.pose.position.x = position_end.x[0]
+        self.marker_end.pose.position.y = position_end.y[0]
+        self.marker_pub_end.publish(self.marker_end)
+
     def delete_all(self) -> None:
         empty_marker = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), id=0)
         empty_marker.action = Marker.DELETE
@@ -271,8 +289,6 @@ class OppTrajPredictor(PredictionNode):
 
     ### MAIN LOOP ###
     def loop(self):
-        rate = self.create_rate(self.loop_rate)
-
         self.get_logger().info('[Opp. Pred.] Opponent Predictor waiting...')
         self.wait_for_message('/global_waypoints', WpntArray)
         self.wait_for_message('/global_waypoints_scaled', WpntArray)
@@ -285,7 +301,8 @@ class OppTrajPredictor(PredictionNode):
         self.get_logger().info('[Opp. Pred.] Opponent Predictor ready!')
 
         while rclpy.ok():
-            
+            rclpy.spin_once(self, timeout_sec=0.0)
+
             opponent_pos_copy = copy.deepcopy(self.opponent_pos)
 
             prediction_obs_pred_arr = PredictionArray()
@@ -377,6 +394,13 @@ class OppTrajPredictor(PredictionNode):
                     self.prediction_obs_pred_pub.publish(prediction_obs_pred_arr)
 
                     self.opp_marker_pub.publish(opp_marker_array)
+                    if obstacle_list:
+                        self.publish_begin_end_markers(
+                            current_opponent_s,
+                            current_opponent_d,
+                            obstacle_list[-1].s_center,
+                            obstacle_list[-1].d_center
+                        )
                     
                     self.expire_counter = 0
                 else:
@@ -468,16 +492,7 @@ class OppTrajPredictor(PredictionNode):
                         
                         self.expire_counter = 0
                         
-                        # Visualize the prediction (Watchout for wrap around)
-                        position_beginn = self.frenet2glob([beginn_s%self.max_s_updated], [beginn_d])
-                        self.marker_beginn.pose.position.x = position_beginn.x[0]
-                        self.marker_beginn.pose.position.y = position_beginn.y[0]
-                        self.marker_pub_beginn.publish(self.marker_beginn)
-
-                        position_end = self.frenet2glob([end_s%self.max_s_updated], [end_d])
-                        self.marker_end.pose.position.x = position_end.x[0]
-                        self.marker_end.pose.position.y = position_end.y[0]
-                        self.marker_pub_end.publish(self.marker_end)
+                        self.publish_begin_end_markers(beginn_s, beginn_d, end_s, end_d)
 
             self.prediction_obs_pred_pub.publish(prediction_obs_pred_arr)
 
@@ -488,8 +503,7 @@ class OppTrajPredictor(PredictionNode):
 
             # print("Time: {}".format(time.process_time() - start))
 
-        rclpy.spin_once(self, timeout_sec=0.0)
-        rate.sleep()
+            time.sleep(1.0 / self.loop_rate)
 
 if __name__ == '__main__':
     rclpy.init()
