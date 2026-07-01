@@ -11,7 +11,7 @@ Controls:
   Space        Stop (speed and steering = 0)
   H            Human Drive mode
   A            Auto Drive mode
-  Q / Ctrl+C   Quit
+  Ctrl+C       Quit (in the node's terminal)
 """
 
 import rclpy
@@ -49,7 +49,7 @@ class KeyboardJoyNode(Node):
         print("  Space       : Stop (speed and steering = 0)")
         print("  H           : Human Drive mode")
         print("  A           : Auto Drive mode")
-        print("  Q           : Quit")
+        print("  Ctrl+C      : Quit (in this terminal)")
 
     # ------------------------------------------------------------------ #
 
@@ -65,8 +65,11 @@ class KeyboardJoyNode(Node):
                 self.mode = 'human'
             elif c == 'a':
                 self.mode = 'auto'
-            elif c == 'q':
-                raise KeyboardInterrupt
+            # pynput hooks keys globally (any window), so a stray 'q' typed
+            # anywhere would kill the node - disabled. Stop the node with
+            # Ctrl+C in its terminal instead.
+            # elif c == 'q':
+            #     raise KeyboardInterrupt
 
     def _on_release(self, key):
         self._held.discard(key)
