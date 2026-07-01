@@ -21,10 +21,14 @@ trajectory_planning_helpers==0.79
 tqdm
 filterpy==1.4.5
 
-# pynput: global keyboard listener for stack_master/keyboard_joy_node.py
-# (keyboard teleop -> /joy_keyboard). Without it that node crashes on import
-# and `keyboard_teleop:=true` silently has no publisher.
-pynput
+# pynput (keyboard teleop -> /joy_keyboard for keyboard_joy_node) is installed
+# via environment.yml, NOT here. On Linux, `pip install pynput` drags in evdev,
+# whose source-only PyPI wheel compiles against the kernel's
+# linux/input-event-codes.h and hard-fails on hosts whose headers lack recent key
+# codes (older distros like Ubuntu 20.04, and the conda toolchain's isolated
+# sysroot). conda-forge ships a prebuilt evdev, so pynput is pinned in the conda
+# layer instead. Do NOT add `pynput` back here — it re-breaks the build on those
+# hosts. See the pynput note in environment.yml.
 
 # scipy is pinned here because the verified env had a pip scipy shadowing the
 # conda one. If you prefer the conda build, move this to environment.yml instead.

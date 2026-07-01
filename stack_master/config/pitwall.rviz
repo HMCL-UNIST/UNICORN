@@ -6,8 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /UTILS1
-        - /PLANNER1/Prediction1
       Splitter Ratio: 0.5
     Tree Height: 322
   - Class: rviz_common/Selection
@@ -127,9 +125,9 @@ Visualization Manager:
               Enabled: true
               Invert Rainbow: false
               Max Color: 255; 255; 255
-              Max Intensity: 6.046329498291016
+              Max Intensity: 5.301379680633545
               Min Color: 0; 0; 0
-              Min Intensity: 0.516697108745575
+              Min Intensity: 0.8371479511260986
               Name: Ego Scan
               Position Transformer: XYZ
               Selectable: true
@@ -406,7 +404,7 @@ Visualization Manager:
           Enabled: true
           Name: Virtual objects (opp + static)
           Namespaces:
-            {}
+            static_obs: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -545,6 +543,18 @@ Visualization Manager:
             Value: /global_waypoints/markers
           Value: false
         - Class: rviz_default_plugins/MarkerArray
+          Enabled: true
+          Name: Local waypoints
+          Namespaces:
+            "": true
+          Topic:
+            Depth: 5
+            Durability Policy: Volatile
+            History Policy: Keep Last
+            Reliability Policy: Reliable
+            Value: /local_waypoints/markers
+          Value: true
+        - Class: rviz_default_plugins/MarkerArray
           Enabled: false
           Name: Shortest path
           Namespaces:
@@ -650,9 +660,9 @@ Visualization Manager:
           Displays:
             - Class: rviz_default_plugins/MarkerArray
               Enabled: true
-              Name: Avoidance path
+              Name: Static Avoidance path
               Namespaces:
-                {}
+                "": true
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
@@ -662,7 +672,7 @@ Visualization Manager:
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: false
-              Name: Avoidance (SQP / predictive)
+              Name: Dynamic Avoidance (SQP / predictive)
               Namespaces:
                 {}
               Topic:
@@ -684,44 +694,6 @@ Visualization Manager:
                 Reliability Policy: Reliable
                 Value: /planner/avoidance/spline_samples
               Value: false
-            - Class: rviz_default_plugins/Marker
-              Enabled: false
-              Name: Considered obstacle
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/avoidance/considered_OBS
-              Value: false
-            - Class: rviz_default_plugins/Marker
-              Enabled: false
-              Name: Propagated obstacle
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/avoidance/propagated_obs
-              Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: Start waypoints
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/start_wpnts/markers
-              Value: false
           Enabled: true
           Name: Avoidance / Overtaking
         - Class: rviz_common/Group
@@ -730,26 +702,13 @@ Visualization Manager:
               Enabled: true
               Name: Recovery path
               Namespaces:
-                "": true
+                {}
               Topic:
                 Depth: 5
                 Durability Policy: Volatile
                 History Policy: Keep Last
                 Reliability Policy: Reliable
                 Value: /planner/recovery/markers
-              Value: true
-            - Class: rviz_default_plugins/Marker
-              Enabled: true
-              Name: Recovery lookahead
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                Filter size: 10
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/recovery/lookahead_point
               Value: true
             - Class: rviz_default_plugins/MarkerArray
               Enabled: false
@@ -763,36 +722,12 @@ Visualization Manager:
                 Reliability Policy: Reliable
                 Value: /planner/recovery/spline_samples
               Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: Recovery checkpoints
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/recovery/checkpoints
-              Value: false
-          Enabled: true
+          Enabled: false
           Name: RECOVERY
       Enabled: true
       Name: PLANNER
     - Class: rviz_common/Group
       Displays:
-        - Class: rviz_default_plugins/MarkerArray
-          Enabled: true
-          Name: MarkerArray
-          Namespaces:
-            "": true
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /local_waypoints/markers
-          Value: true
         - Class: rviz_default_plugins/Marker
           Enabled: true
           Name: Lookahead point (L1)
@@ -836,7 +771,7 @@ Visualization Manager:
           Enabled: true
           Name: Trailing opponent
           Namespaces:
-            {}
+            "": true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -845,23 +780,11 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /trailing_opponent_marker
           Value: true
-        - Class: rviz_default_plugins/MarkerArray
-          Enabled: false
-          Name: Controller prediction
-          Namespaces:
-            {}
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /controller_prediction/markers
-          Value: false
         - Class: rviz_default_plugins/Marker
           Enabled: true
           Name: FTG best point
           Namespaces:
-            "": true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -874,7 +797,7 @@ Visualization Manager:
           Enabled: true
           Name: FTG best gap
           Namespaces:
-            "": true
+            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -882,53 +805,15 @@ Visualization Manager:
             Reliability Policy: Reliable
             Value: /best_gap/markers
           Value: true
-        - Class: rviz_default_plugins/MarkerArray
-          Enabled: false
-          Name: FTG processed scan
-          Namespaces:
-            {}
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /scan_proc/markers
-          Value: false
       Enabled: true
       Name: CONTROL
     - Class: rviz_common/Group
       Displays:
         - Class: rviz_default_plugins/Marker
           Enabled: true
-          Name: State marker
+          Name: Trailing target
           Namespaces:
             "": true
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /state_marker
-          Value: true
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: Marker
-          Namespaces:
-            {}
-          Topic:
-            Depth: 5
-            Durability Policy: Volatile
-            Filter size: 10
-            History Policy: Keep Last
-            Reliability Policy: Reliable
-            Value: /emergency_marker
-          Value: true
-        - Class: rviz_default_plugins/Marker
-          Enabled: true
-          Name: Marker
-          Namespaces:
-            {}
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -1007,11 +892,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 34.72664260864258
+      Scale: 35.13869094848633
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
-      X: -3.6870789527893066
-      Y: 3.108307361602783
+      X: 11.4805908203125
+      Y: 9.133033752441406
     Saved: ~
 Window Geometry:
   Displays:
