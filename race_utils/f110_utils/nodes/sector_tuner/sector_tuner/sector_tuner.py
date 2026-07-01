@@ -64,7 +64,7 @@ class SectorTuner(Node):
 
         desc = ParameterDescriptor(
             type=ParameterType.PARAMETER_DOUBLE,
-            floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.0, step=0.01)])
+            floating_point_range=[FloatingPointRange(from_value=0.0, to_value=2.0, step=0.01)])
         self.set_descriptor('global_limit', descriptor=desc)
         for i in range(self.n_sectors):
             self.set_descriptor('Sector' + str(i) + '.scaling', descriptor=desc)
