@@ -9,7 +9,7 @@
   <arg name="use_estop"      default="false"               description="Use emergency stop (true) or not (false)"/>
   <!-- Keyboard teleop: start keyboard_joy (pynput -> /joy_keyboard) and route the
        mux to it. The pitwall panel's Joy/Keyboard buttons can still switch at runtime. -->
-  <arg name="keyboard_teleop" default="true"              description="Drive the ego with the keyboard instead of a joystick"/>
+  <arg name="keyboard_teleop" default="false"              description="Drive the ego with the keyboard instead of a joystick"/>
   <!-- virtual_perception (scan_overlay + virtual opponent + static obstacles).
        Defaults ON in sim (preserves prior behavior), OFF on the real car; toggle
        with virtual:=true (e.g. to overlay a virtual opponent onto the real LiDAR). -->
