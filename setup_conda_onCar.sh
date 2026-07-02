@@ -155,11 +155,45 @@ case "$(uname)" in
     ;;
 esac
 
+# --- 6b. WiFi power-save OFF (Linux/NetworkManager only) ---------------------
+# NetworkManager parks the WiFi radio between packets to save power; on the car
+# that shows up as periodic latency spikes / brief dropouts on the DDS traffic.
+# Drop a conf.d snippet (wifi.powersave=2 == disabled) and reload. Idempotent:
+# skips when the file already has the setting. Needs sudo; never fatal.
+if [ "$(uname)" = "Linux" ] && command -v nmcli >/dev/null 2>&1; then
+  PSAVE_CONF=/etc/NetworkManager/conf.d/wifi-powersave-off.conf
+  if [ -f "$PSAVE_CONF" ] && grep -q 'wifi.powersave *= *2' "$PSAVE_CONF" 2>/dev/null; then
+    say "WiFi power-save already disabled ($PSAVE_CONF) — skipping"
+  else
+    say "disabling WiFi power-save via NetworkManager (sudo)…"
+    { printf '[connection]\nwifi.powersave = 2\n' | sudo tee "$PSAVE_CONF" >/dev/null \
+        && sudo systemctl restart NetworkManager; } \
+      || echo "  (skipped: no sudo / NetworkManager reload failed — network still works)"
+  fi
+fi
+
 # --- 7. build ----------------------------------------------------------------
-say "colcon build (Release)…"
-( cd "$WS" && colcon build --symlink-install \
-    --base-paths "src/$(basename "$REPO")" \
-    --cmake-args -DCMAKE_BUILD_TYPE=Release )
+# Build in a CLEAN, isolated environment so a system ROS the caller's ~/.bashrc
+# sourced (e.g. `source /opt/ros/noetic/setup.bash`) cannot leak into the build.
+# If it leaks, colcon detects /opt/ros/<distro> as a parent prefix and BAKES it
+# into install/setup.bash; then every `unicorn` entry re-sources ROS1 and nodes die
+# with `_TYPE_SUPPORT`. `conda activate` only PREPENDS the env, it never removes the
+# leak (it even re-appends the pre-activate CMAKE_PREFIX_PATH), so we don't try to
+# scrub it -- we start from `env -i` (empty env) and let conda build the env fresh.
+# This needs no allow/deny path list and is immune to any distro/rc the user has.
+say "colcon build (Release, in isolated env)…"
+CONDA_BASE="$(conda info --base)"
+env -i HOME="$HOME" USER="${USER:-$(id -un)}" TERM="${TERM:-xterm}" \
+       PATH="/usr/bin:/bin" \
+  bash -c '
+    set -eo pipefail
+    source "'"$CONDA_BASE"'/etc/profile.d/conda.sh"
+    conda activate "'"$ENV_NAME"'"
+    export PYTHONNOUSERSITE=1
+    cd "'"$WS"'" && colcon build --symlink-install \
+        --base-paths "src/'"$(basename "$REPO")"'" \
+        --cmake-args -DCMAKE_BUILD_TYPE=Release
+  '
 
 say "done. Open a NEW shell (or 'source ~/.bashrc') then run:  unicorn"
 echo "    ros2 launch stack_master race.launch.xml sim:=true map:=f"

@@ -92,6 +92,18 @@ dependencies:
   # Pinning the conda-forge build HERE installs it correctly in the conda layer
   # first, so pip sees quadprog already satisfied and never builds the bad wheel.
   - quadprog=0.1.13
+  # pynput (keyboard teleop -> /joy_keyboard for keyboard_joy_node). On Linux it
+  # depends on `evdev`, whose PyPI sdist is source-only and compiles ecodes.c
+  # against the kernel's linux/input-event-codes.h. evdev references recent key
+  # codes (KEY_ALL_APPLICATIONS, KEY_DICTATE, ...) that are MISSING from older
+  # distro headers (e.g. Ubuntu 20.04's linux-libc-dev) AND from the conda
+  # toolchain's isolated sysroot, so `pip install pynput` hard-fails the build on
+  # those hosts (works on 24.04/macOS by luck of newer/absent headers). conda-forge
+  # ships a PREBUILT evdev, so pinning pynput HERE installs it in the conda layer
+  # first and pip then sees it satisfied and never compiles evdev — robust on every
+  # OS/kernel. Same "put it in conda so pip can't build the bad wheel" pattern as
+  # quadprog above. NOTE: pynput is therefore intentionally NOT in requirements.txt.
+  - pynput=1.8.2
   # pybind11 is the only build dep of range_libc (header-only binding, no Cython,
   # no numpy at build). Having it here lets range_libc build with
   # --no-build-isolation entirely from conda (no PyPI fetch) — see note below.
