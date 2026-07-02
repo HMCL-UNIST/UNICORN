@@ -9,6 +9,7 @@ import numpy as np
 import rclpy
 from rclpy.node import Node
 from rclpy.parameter_event_handler import ParameterEventHandler
+from rclpy.duration import Duration
 from rclpy.qos import qos_profile_sensor_data
 from ament_index_python.packages import get_package_share_directory
 
@@ -780,6 +781,7 @@ class StaticDynamic(Node):
 
     def clearmarkers(self):
         marker = Marker()
+        marker.header.frame_id = "map"  # set so the DELETEALL marker isn't dropped by RViz (empty frame)
         marker.action = 3
         markers = MarkerArray()
         markers.markers = [marker]
@@ -791,6 +793,7 @@ class StaticDynamic(Node):
             marker = Marker()
             marker.header.frame_id = "map"
             marker.header.stamp = self.current_stamp
+            marker.lifetime = Duration(seconds=3.0 / self.rate).to_msg()  # auto-expire (~3 frames) so stale markers clear
             marker.id = tracked_obstacle.id
             marker.type = marker.SPHERE
 
