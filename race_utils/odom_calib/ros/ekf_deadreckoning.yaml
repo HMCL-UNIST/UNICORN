@@ -1,0 +1,66 @@
+# robot_localization EKF — pure dead reckoning (NO cartographer pose).
+#
+# Purpose: validate, on the *real* robot_localization package, the offline
+# finding that fusing the VESC IMU (AHRS orientation + gyro) with the wheel
+# twist beats /vesc/odom alone.  Unlike the shipped stack_master/config/
+# ekf_cartographer.yaml — which fuses /tracked_pose and therefore is locked to
+# GT — this config never sees the map pose, so /odometry/filtered is an honest
+# dead-reckoning estimate you can score against /tracked_pose.
+#
+# world_frame == odom  -> the filter outputs an odom-frame pose (free running).
+# Compare it to cartographer /tracked_pose after a one-time rigid alignment.
+ekf_deadreckoning:
+  ros__parameters:
+    frequency: 50.0
+    sensor_timeout: 0.1
+    two_d_mode: true
+    publish_tf: false            # don't fight cartographer's map->odom during replay
+
+    map_frame: map
+    odom_frame: odom
+    base_link_frame: base_link
+    world_frame: odom            # DEAD RECKONING (use 'map' only if you add an absolute pose)
+
+    # ---- VESC wheel odometry: longitudinal speed only ----
+    # x, y, z, roll, pitch, yaw, vx, vy, vz, vroll, vpitch, vyaw, ax, ay, az
+    odom0: /vesc/odom
+    odom0_config: [false, false, false,
+                   false, false, false,
+                   true,  false, false,
+                   false, false, false,
+                   false, false, false]
+    odom0_differential: false
+    odom0_queue_size: 10
+
+    # ---- VESC IMU (AHRS): absolute yaw + yaw rate ----
+    # This is the whole point: orientation yaw is drift-free (AHRS), vyaw is the gyro.
+    # The base_link->vesc_imu static TF (yaw +90°, see low_level.launch.xml) must be
+    # alive so RL can rotate the IMU into base_link.
+    imu0: /vesc/sensors/imu/raw
+    imu0_config: [false, false, false,
+                  false, false, true,     # yaw (orientation)
+                  false, false, false,
+                  false, false, true,     # vyaw (gyro)
+                  false, false, false]
+    imu0_differential: false             # try true if the AHRS yaw datum fights the map
+    imu0_relative: true                  # treat the first yaw as the zero reference
+    imu0_remove_gravitational_acceleration: true
+    imu0_queue_size: 10
+
+    # NB: all entries MUST be floats (0.0, not 0) — rcl_yaml_param_parser rejects
+    # a sequence that mixes integer and double.
+    process_noise_covariance: [0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.05, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.06, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.03, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.025, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.025, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.04, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.02, 0.0, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.0, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.01, 0.0,
+                               0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.015]
