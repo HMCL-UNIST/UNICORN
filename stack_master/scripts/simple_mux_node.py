@@ -60,7 +60,9 @@ class SimpleMuxNode(Node):
         )
         
 
-        self.current_host = 'autodrive' if p('sim') else None
+        # start idle in every mode (sim included): nothing is published until a
+        # human engages via the joy/keyboard A button (-> autodrive) or H (-> humandrive).
+        self.current_host = None
         self.human_drive  = None
         self.autodrive    = None
         self.scan         = None
