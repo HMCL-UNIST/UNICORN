@@ -155,6 +155,23 @@ case "$(uname)" in
     ;;
 esac
 
+# --- 6b. WiFi power-save OFF (Linux/NetworkManager only) ---------------------
+# NetworkManager parks the WiFi radio between packets to save power; on the car
+# that shows up as periodic latency spikes / brief dropouts on the DDS traffic.
+# Drop a conf.d snippet (wifi.powersave=2 == disabled) and reload. Idempotent:
+# skips when the file already has the setting. Needs sudo; never fatal.
+if [ "$(uname)" = "Linux" ] && command -v nmcli >/dev/null 2>&1; then
+  PSAVE_CONF=/etc/NetworkManager/conf.d/wifi-powersave-off.conf
+  if [ -f "$PSAVE_CONF" ] && grep -q 'wifi.powersave *= *2' "$PSAVE_CONF" 2>/dev/null; then
+    say "WiFi power-save already disabled ($PSAVE_CONF) — skipping"
+  else
+    say "disabling WiFi power-save via NetworkManager (sudo)…"
+    { printf '[connection]\nwifi.powersave = 2\n' | sudo tee "$PSAVE_CONF" >/dev/null \
+        && sudo systemctl restart NetworkManager; } \
+      || echo "  (skipped: no sudo / NetworkManager reload failed — network still works)"
+  fi
+fi
+
 # --- 7. build ----------------------------------------------------------------
 # Build in a CLEAN, isolated environment so a system ROS the caller's ~/.bashrc
 # sourced (e.g. `source /opt/ros/noetic/setup.bash`) cannot leak into the build.
