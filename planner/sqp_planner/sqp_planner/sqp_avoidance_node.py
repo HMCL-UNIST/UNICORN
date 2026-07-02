@@ -19,6 +19,9 @@ from std_msgs.msg import Bool
 from copy import deepcopy
 
 from ccma import CCMA
+# NumPy 2.0 removed the np.row_stack alias, but the ccma library still calls it.
+if not hasattr(np, "row_stack"):
+    np.row_stack = np.vstack
 import trajectory_planning_helpers as tph
 from transforms3d.euler import quat2euler
 

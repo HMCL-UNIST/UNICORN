@@ -13,6 +13,9 @@ from scipy.optimize import fmin_l_bfgs_b
 from frenet_conversion.frenet_converter import FrenetConverter
 
 from ccma import CCMA
+# NumPy 2.0 removed the np.row_stack alias, but the ccma library still calls it.
+if not hasattr(np, "row_stack"):
+    np.row_stack = np.vstack
 
 class GaussianProcessOppTraj(PredictionNode):
     def __init__(self):
