@@ -15,7 +15,6 @@
   <arg name="map"                            description="Map name (folder created under stack_master/maps/)"/>
   <arg name="vehicle_config" default="$(find-pkg-share stack_master)/config/CAR/vehicle_config.yaml"/>
   <arg name="use_estop"     default="false"  description="Use emergency stop (true) or not (false)"/>
-  <arg name="keyboard_teleop" default="false" description="Make the mux honour keyboard teleop (/joy_keyboard); run keyboard_joy_node on the operator laptop"/>
 
   <let name="cartographer_config_dir" value="$(find-pkg-share stack_master)/config"/>
   <let name="maps_save_dir" value="$(find-pkg-prefix stack_master)/../../src/unicorn-racing-stack/stack_master/maps/$(var map)"/>
@@ -27,7 +26,6 @@
     <arg name="vehicle_config" value="$(var vehicle_config)"/>
     <arg name="use_estop"      value="$(var use_estop)"/>
     <arg name="virtual"        value="false"/>
-    <arg name="keyboard_teleop" value="$(var keyboard_teleop)"/>
   </include>
 
   <!-- ===== Cartographer SLAM (no IMU, no odometry: mapping_2d.lua) =====

@@ -7,9 +7,6 @@
   <let name="config_dir" value="$(find-pkg-share stack_master)/config/CAR" unless="$(var sim)"/>
   <arg name="vehicle_config" default="$(var config_dir)/vehicle_config.yaml"/>
   <arg name="use_estop"      default="false"               description="Use emergency stop (true) or not (false)"/>
-  <!-- Keyboard teleop: start keyboard_joy (pynput -> /joy_keyboard) and route the
-       mux to it. The pitwall panel's Joy/Keyboard buttons can still switch at runtime. -->
-  <arg name="keyboard_teleop" default="false"              description="Drive the ego with the keyboard instead of a joystick"/>
   <!-- virtual_perception (scan_overlay + virtual opponent + static obstacles).
        Defaults ON in sim (preserves prior behavior), OFF on the real car; toggle
        with virtual:=true (e.g. to overlay a virtual opponent onto the real LiDAR). -->
@@ -81,15 +78,14 @@
     </include>
   </group>
 
-  <!-- ========== ALWAYS ========== -->
-  <!-- Keyboard teleop source (pynput -> /joy_keyboard). pynput needs a focused
-       keyboard + display, so only start it here in sim (single machine). On the
-       real (headless) car, run keyboard_joy_node on the operator laptop instead;
-       keyboard_teleop:=true still flips the mux below to honour /joy_keyboard. -->
-  <group if="$(var keyboard_teleop)">
-    <node pkg="stack_master" exec="keyboard_joy_node.py" name="keyboard_joy" output="screen"
-          if="$(var sim)"/>
-  </group>
+  <!-- ========== KEYBOARD TELEOP SOURCE (sim only) ========== -->
+  <!-- keyboard_joy (pynput -> /joy_keyboard). pynput needs a focused keyboard +
+       display, so only start it in sim (single machine); it always runs here so the
+       pitwall panel can switch the mux to keyboard at runtime. On the real (headless)
+       car, run keyboard_joy_node on the operator laptop instead. The mux starts on joy
+       and only honours /joy_keyboard once the panel flips /ego/use_keyboard. -->
+  <node pkg="stack_master" exec="keyboard_joy_node.py" name="keyboard_joy" output="screen"
+        if="$(var sim)"/>
 
   <!-- Joystick / Command mux -->
   <node pkg="stack_master" exec="simple_mux_node.py" name="simple_mux" output="log">
@@ -99,8 +95,8 @@
     <param name="joy_max_speed" value="4.0"/>
     <param name="use_estop" value="$(var use_estop)"/>
     <param name="sim" value="$(var sim)"/>
-    <!-- start honouring /joy_keyboard immediately when keyboard teleop is on -->
-    <param name="use_keyboard" value="$(var keyboard_teleop)"/>
+    <!-- use_keyboard defaults False (joy); the pitwall panel flips it at runtime via
+         /ego/use_keyboard. keyboard_joy still publishes /joy_keyboard in sim regardless. -->
   </node>
 
 </launch>
