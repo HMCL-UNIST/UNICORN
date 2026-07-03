@@ -69,14 +69,18 @@ class WaypointData:
         self.array = None
         self.stamp = None
         self.is_init = False
+        # Debug: wall-clock of the last initialize_traj (cache replacement) and
+        # how many times it has happened. None/0 until the first real update.
+        self.last_init_sec = None
+        self.init_count = 0
         self.is_gb_track_wpnts = False
         self.is_ot_wpnts = False
         self.closest_target = None
         self.closest_gap = None
+        # Debug: last _check_free_frenet decision detail (per-obstacle branch/free_dist).
+        self.free_dbg = None
         self.is_closed = is_closed
         self.vel_planner_safety_factor = 1.0
-        # Sec this cache was last selected as local_wpnts_src (None until first use).
-        self.last_used_sec = None
         self.update_param()
 
     def update_param(self):
@@ -97,6 +101,11 @@ class WaypointData:
             self.list = wpnt.wpnts
             self.array = np.array([[w.x_m, w.y_m, w.s_m, w.d_m] for w in wpnt.wpnts])
             self.is_init = True
+            # Debug: when this cache was last replaced with fresh planner output.
+            # Lets the loop snapshot report cache staleness (wall-clock since the
+            # last real re-init) independently of the message header stamp.
+            self.last_init_sec = self.node.now_sec()
+            self.init_count += 1
 
 
 def time_to_float(stamp) -> float:
@@ -166,6 +175,12 @@ class StateMachine(Node):
         self._load_sector_params()
         self.cur_volt = 11.69  # default value for sim
         self.static_overtaking_mode = False
+        # Per-loop slice diagnostics, set by get_splini_wpts / get_recovery_wpts,
+        # reset at the top of loop() so a snapshot only shows the source actually used.
+        self._splini_dbg = None
+        self._recovery_dbg = None
+        # Previous loop's source cache, for rule 2 (drop the cache on a real src change).
+        self._prev_src_cache = None
 
         # waypoint variables
         self.cur_id_ot = 1
@@ -757,6 +772,11 @@ class StateMachine(Node):
         obstacles = self.cur_obstacles_in_interest
         obstacle_predictions = self.obstacles_prediction
 
+        # Debug: per-obstacle record of which branch decided free/blocked, so a
+        # "GB judged free while an obstacle is right ahead" can be explained
+        # (empty obstacle list vs prediction branch vs static/dynamic geom).
+        dbg = {"is_init": bool(wpnts_data.is_init), "n_obs": len(obstacles), "obs": []}
+
         if wpnts_data.is_init:
             max_gap = (wpnts_data.array[-1, 2] - self.cur_s) % self.max_s
             for obs in obstacles:
@@ -767,9 +787,15 @@ class StateMachine(Node):
                 ttc = (gap - self.pars["veh_params"]["length"]) / clip_vs
                 tt0 = (gap + 0.3 * self.pars["veh_params"]["length"]) / clip_vs
 
+                rec = {"id": int(obs.id), "static": bool(obs.is_static),
+                       "gap": round(float(gap), 2), "d": round(float(obs.d_center), 3),
+                       "branch": None, "free_dist": None, "blocked": False}
+
                 if obs.is_static:
                     if not wpnts_data.is_closed and gap > max_gap:
+                        rec["branch"] = "static/beyond_path"
                         is_free = False
+                        rec["blocked"] = True
                         if closest_obs is None or min_gap > gap:
                             closest_obs = obs
                             min_gap = gap
@@ -782,8 +808,11 @@ class StateMachine(Node):
                         min_dist = abs(ot_d - obs_d)
                         free_dist = min_dist - obs.size / 2 - self.gb_ego_width_m / 2
                         scaling_factor = np.clip(gap / free_scaling_reference_distance_m, 0.0, 1.0)
+                        rec["branch"] = "static/geom"
+                        rec["free_dist"] = round(float(free_dist), 3)
                         if free_dist < lateral_width_m * scaling_factor:
                             is_free = False
+                            rec["blocked"] = True
                             self.get_logger().info(
                                 "[State Machine] FREE False, obs dist to ot lane: {} m".format(free_dist),
                                 throttle_duration_sec=1.0,
@@ -791,8 +820,11 @@ class StateMachine(Node):
                             if closest_obs is None or min_gap > gap:
                                 closest_obs = obs
                                 min_gap = gap
+                    else:
+                        rec["branch"] = "static/gap>=max_horizon"
                 else:
                     if len(obstacle_predictions) != 0 and self.obstacles_prediction_id == obs.id:
+                        rec["branch"] = "dyn/pred"
                         start_idx = 0
                         end_idx = len(obstacle_predictions)
                         if is_ot_wpnts:
@@ -800,12 +832,15 @@ class StateMachine(Node):
                                 start_idx = min(int(ttc / 0.05), len(obstacle_predictions))
                             if tt0 > 0:
                                 end_idx = min(int(tt0 / 0.05), len(obstacle_predictions))
+                        worst_fd = None
                         for obs_pred in obstacle_predictions[start_idx:end_idx]:
                             wpnt_idx = np.argmin(abs(wpnts_data.array[:, 2] - obs_pred.pred_s))
                             wpnt_d = wpnts_data.list[wpnt_idx].d_m
                             min_dist = abs(wpnt_d - obs_pred.pred_d)
                             free_dist = min_dist - obs.size / 2 - self.gb_ego_width_m / 2
                             scaling_factor = np.clip(gap / free_scaling_reference_distance_m, 0.0, 1.0)
+                            if worst_fd is None or free_dist < worst_fd:
+                                worst_fd = free_dist
                             if is_ot_wpnts:
                                 self.get_logger().warn(
                                     f"free_dist: {free_dist}, lateral_width_m: {lateral_width_m}, "
@@ -815,12 +850,20 @@ class StateMachine(Node):
                                 )
                             if free_dist < lateral_width_m * scaling_factor:
                                 is_free = False
+                                rec["blocked"] = True
                                 if closest_obs is None or min_gap > gap:
                                     closest_obs = obs
                                     min_gap = gap
+                        rec["free_dist"] = None if worst_fd is None else round(float(worst_fd), 3)
+                        rec["pred_n"] = int(end_idx - start_idx)
                     else:
+                        rec["branch"] = "dyn/nopred (id_mismatch or empty)"
+                        rec["pred_id"] = int(self.obstacles_prediction_id) if self.obstacles_prediction_id is not None else None
+                        rec["pred_len"] = len(obstacle_predictions)
                         if not wpnts_data.is_closed and gap > max_gap:
+                            rec["branch"] = "dyn/nopred/beyond_path"
                             is_free = False
+                            rec["blocked"] = True
                             if closest_obs is None or min_gap > gap:
                                 closest_obs = obs
                                 min_gap = gap
@@ -832,14 +875,25 @@ class StateMachine(Node):
                             min_dist = abs(ot_d - obs.d_center)
                             free_dist = min_dist - obs.size / 2 - self.gb_ego_width_m / 2
                             scaling_factor = np.clip(gap / free_scaling_reference_distance_m, 0.0, 1.0)
+                            rec["free_dist"] = round(float(free_dist), 3)
                             if free_dist < lateral_width_m * scaling_factor:
                                 is_free = False
+                                rec["blocked"] = True
                                 if closest_obs is None or min_gap > gap:
                                     closest_obs = obs
                                     min_gap = gap
+                        else:
+                            rec["branch"] = "dyn/nopred/gap>=max_horizon"
+                dbg["obs"].append(rec)
         else:
-            is_free = True
+            # An OT/recovery cache with no valid path (is_init False, e.g. expired by
+            # _expire_stale_cache) must NOT read as "free": treating a missing avoidance
+            # path as clear keeps OVERTAKE alive on an empty cache, which then emits an
+            # empty local_wpnts. Report blocked so the source is dropped instead.
+            is_free = not (wpnts_data.is_ot_wpnts and not wpnts_data.is_init)
 
+        dbg["is_free"] = bool(is_free)
+        wpnts_data.free_dbg = dbg
         wpnts_data.closest_target = closest_obs
         wpnts_data.closest_gap = min_gap
         return is_free
@@ -878,19 +932,32 @@ class StateMachine(Node):
         wpnts_data.closest_gap = min_gap
         return is_free
 
-    def _expire_unused_ot_cache(self, wpnts_data, ttl_sec):
-        # Reference = last_used_sec, else the cached stamp (time the path was received).
+    def _src_cache(self, src):
+        # The planner-output cache a given local_wpnts_src slices from (None if the
+        # source is not backed by an OT/recovery cache, e.g. GB_TRACK).
+        if src == StateType.OVERTAKE:
+            return self.cur_static_avoidance_wpnts if self.static_overtaking_mode else self.cur_avoidance_wpnts
+        if src == StateType.RECOVERY:
+            return self.cur_recovery_wpnts
+        return None
+
+    def _expire_stale_cache(self, wpnts_data, ttl_sec):
+        # Drop a stale planner-output cache: one that is NOT the current source and
+        # whose planner stopped emitting for > ttl_sec (a ghost / old frozen path).
+        # The cache actively driven as local_wpnts_src is exempt -- kept alive by the
+        # on_spline/hyst/killing hysteresis in _check_availability so the car keeps
+        # following it through a few skipped solver frames. A cache that stays alive
+        # (planner keeps publishing) but is not the current source is left intact so
+        # it can be re-selected instantly with fresh data.
         if not wpnts_data.is_init:
             return
-        ref = wpnts_data.last_used_sec
-        if ref is None:
-            ref = time_to_float(wpnts_data.stamp) if wpnts_data.stamp is not None else None
-        if ref is None:
+        if wpnts_data is self._src_cache(self.local_wpnts_src):
             return
-        if self.now_sec() - ref > ttl_sec:
+        if wpnts_data.last_init_sec is None:
+            return
+        if self.now_sec() - wpnts_data.last_init_sec > ttl_sec:
             wpnts_data.is_init = False
             wpnts_data.closest_target = None
-            wpnts_data.last_used_sec = None
 
     def _check_availability(self, wpnts, wpnts_data) -> bool:
         if (self.now_sec() - time_to_float(wpnts_data.stamp)) > wpnts_data.killing_timer_sec:
@@ -1070,10 +1137,20 @@ class StateMachine(Node):
         else:
             wpnts = self.cur_avoidance_wpnts
 
+        # Never slice an invalidated cache: once _expire_stale_cache drops a path
+        # (planner stopped emitting), is_init is False and its array is a frozen
+        # old trajectory. Returning [] here makes the caller fall back to GB_TRACK
+        # instead of emitting a stale/behind-the-car local path.
+        if not wpnts.is_init:
+            self._splini_dbg = {"static": bool(self.static_overtaking_mode), "invalid_cache": True}
+            return []
+
         diff = np.linalg.norm(wpnts.array[:, 0:2] - self.current_position[:2], axis=1)
         min_idx = np.argmin(diff)
         avoidance_wpnts = wpnts.list[min_idx:min_idx + self.n_loc_wpnts]
 
+        n_from_avoid = len(avoidance_wpnts)
+        glb_extended = 0
         if len(avoidance_wpnts) < self.n_loc_wpnts:
             glb_start_idx = int(wpnts.list[-1].s_m / self.wpnt_dist) + 1
             extra_wpnts = [
@@ -1081,6 +1158,22 @@ class StateMachine(Node):
                 for i in range(self.n_loc_wpnts - len(avoidance_wpnts))
             ]
             avoidance_wpnts.extend(extra_wpnts)
+            glb_extended = len(extra_wpnts)
+
+        # Record exactly how this OVERTAKE local path was assembled so the debug
+        # snapshot can explain a frozen/behind-the-car first_s (argmin pick vs
+        # cache extent vs global-fill), instead of guessing from the raw topic.
+        self._splini_dbg = {
+            "static": bool(self.static_overtaking_mode),
+            "min_idx": int(min_idx),
+            "min_dist": round(float(diff[min_idx]), 3),
+            "pick_s": round(float(wpnts.array[min_idx, 2]), 3),
+            "cache_n": int(len(wpnts.list)),
+            "cache_s0": round(float(wpnts.array[0, 2]), 3),
+            "cache_slast": round(float(wpnts.array[-1, 2]), 3),
+            "n_from_avoid": int(n_from_avoid),
+            "glb_extended": int(glb_extended),
+        }
         return avoidance_wpnts
 
     def get_recovery_wpts(self) -> WpntArray:
@@ -1088,6 +1181,8 @@ class StateMachine(Node):
             diff = np.linalg.norm(self.cur_recovery_wpnts.array[:, 0:2] - self.current_position[:2], axis=1)
             min_idx = np.argmin(diff)
             wpnts = self.cur_recovery_wpnts.list[min_idx:min_idx + self.n_loc_wpnts]
+            n_from_rec = len(wpnts)
+            glb_extended = 0
             if len(wpnts) < self.n_loc_wpnts:
                 glb_start_idx = int(self.cur_recovery_wpnts.list[-1].s_m / self.wpnt_dist)
                 extra_wpnts = [
@@ -1095,6 +1190,17 @@ class StateMachine(Node):
                     for i in range(self.n_loc_wpnts - len(wpnts))
                 ]
                 wpnts.extend(extra_wpnts)
+                glb_extended = len(extra_wpnts)
+            self._recovery_dbg = {
+                "min_idx": int(min_idx),
+                "min_dist": round(float(diff[min_idx]), 3),
+                "pick_s": round(float(self.cur_recovery_wpnts.array[min_idx, 2]), 3),
+                "cache_n": int(len(self.cur_recovery_wpnts.list)),
+                "cache_s0": round(float(self.cur_recovery_wpnts.array[0, 2]), 3),
+                "cache_slast": round(float(self.cur_recovery_wpnts.array[-1, 2]), 3),
+                "n_from_rec": int(n_from_rec),
+                "glb_extended": int(glb_extended),
+            }
             return wpnts
 
     def get_start_wpts(self) -> WpntArray:
@@ -1156,15 +1262,36 @@ class StateMachine(Node):
                 "cache_last_s": round(rec.list[-1].s_m, 3) if rec.list else None,
                 "cache_age": (None if rec.stamp is None
                               else round(self.now_sec() - time_to_float(rec.stamp), 3)),
+                # Wall-clock since the cache was last actually re-initialized with
+                # fresh planner output, and total re-init count. If reinit_age keeps
+                # growing while the topic advances, the cache is stale (never re-slotted).
+                "reinit_age": (None if rec.last_init_sec is None
+                               else round(self.now_sec() - rec.last_init_sec, 3)),
+                "reinit_count": rec.init_count,
                 "is_init": rec.is_init,
             },
             "avoidance": {
                 "topic_s": s0(self.avoidance_wpnts.wpnts) if self.avoidance_wpnts is not None else None,
                 "cache_s": s0(avoid.list),
+                "cache_last_s": round(avoid.list[-1].s_m, 3) if avoid.list else None,
                 "cache_age": (None if avoid.stamp is None
                               else round(self.now_sec() - time_to_float(avoid.stamp), 3)),
+                "reinit_age": (None if avoid.last_init_sec is None
+                               else round(self.now_sec() - avoid.last_init_sec, 3)),
+                "reinit_count": avoid.init_count,
                 "is_init": avoid.is_init,
             },
+            # Internal slice detail from get_splini_wpts / get_recovery_wpts for
+            # THIS loop (None if that source was not used). Shows the exact
+            # min_idx, the s it picked, cache extent, and how many points came
+            # from the avoidance/recovery cache vs global-fill -> pinpoints why
+            # local_first_s sits where it does (argmin pick vs glb-extend).
+            "splini_slice": self._splini_dbg,
+            "recovery_slice": self._recovery_dbg,
+            # Last free-check decisions this loop (why GB/recovery was judged free
+            # or blocked). gb_free explains a "drove into an obstacle ahead" event.
+            "gb_free": self.cur_gb_wpnts.free_dbg,
+            "recovery_free": self.cur_recovery_wpnts.free_dbg,
         }
         self.debug_pub.publish(String(data=json.dumps(snap)))
 
@@ -1396,6 +1523,8 @@ class StateMachine(Node):
     # MAIN LOOP #
     #############
     def loop(self):
+        self._splini_dbg = None
+        self._recovery_dbg = None
         self._handle_momentary_params()
         if self.measuring:
             start = time.perf_counter()
@@ -1411,10 +1540,13 @@ class StateMachine(Node):
         self.cur_static_avoidance_wpnts.closest_target = None
         self.cur_start_wpnts.closest_target = None
 
-        # Drop an OT path (dynamic/static) not selected as local_wpnts_src for >2 s, else the
-        # stale near-raceline path keeps passing _check_on_spline and flips GB<->OVERTAKE.
-        self._expire_unused_ot_cache(self.cur_avoidance_wpnts, 2.0)
-        self._expire_unused_ot_cache(self.cur_static_avoidance_wpnts, 2.0)
+        # Expire any planner-output cache whose planner stopped emitting for >1 s, so
+        # a frozen path (old avoidance/static/recovery output) can't keep being sliced
+        # into local_wpnts or keep passing the sustainability/free checks. A live
+        # planner re-inits every loop, so a path actively being driven never expires.
+        self._expire_stale_cache(self.cur_avoidance_wpnts, 2.0)
+        self._expire_stale_cache(self.cur_static_avoidance_wpnts, 2.0)
+        self._expire_stale_cache(self.cur_recovery_wpnts, 2.0)
 
         # safety check
         if self.cur_volt < self.volt_threshold:
@@ -1440,14 +1572,30 @@ class StateMachine(Node):
         else:
             self.behavior_strategy.trailing_targets = []
 
-        # Mark the chosen overtake cache as used so it isn't expired next frame.
-        if self.local_wpnts_src == StateType.OVERTAKE:
-            used = self.cur_static_avoidance_wpnts if self.static_overtaking_mode else self.cur_avoidance_wpnts
-            used.last_used_sec = self.now_sec()
-
         self.behavior_strategy.overtaking_targets = self.get_overtaking_target()
 
+        # Rule 2 (source change): when the source switches to a different cache (e.g.
+        # RECOVERY->GB as the car reaches the raceline), drop the cache we just left so
+        # its output can't linger and be re-selected as a ghost. A live planner re-fills
+        # its cache via _check_latest_wpnts next time that source is needed, so this only
+        # discards a path we actually stopped driving.
+        cur_src_cache = self._src_cache(self.local_wpnts_src)
+        if self._prev_src_cache is not None and self._prev_src_cache is not cur_src_cache:
+            self._prev_src_cache.is_init = False
+            self._prev_src_cache.closest_target = None
+        self._prev_src_cache = cur_src_cache
+
         local_wpnts = self.states[self.local_wpnts_src](self)
+
+        # Safety net: never publish an empty local path (an invalidated OT/recovery
+        # cache makes its slice return []). An empty WpntArray crashes the controller
+        # (1-D waypoint array indexed as 2-D). Fill from the global raceline, which is
+        # regenerated at the car every loop. Only the PATH source is swapped -- cur_state
+        # is left as the transition decided (e.g. TRAILING keeps trailing/braking), so
+        # this never turns "obstacle ahead" into a full-speed GB run.
+        if not local_wpnts:
+            self.local_wpnts_src = StateType.GB_TRACK
+            local_wpnts = self.states[StateType.GB_TRACK](self)
 
         self._publish_debug(local_wpnts)
 
