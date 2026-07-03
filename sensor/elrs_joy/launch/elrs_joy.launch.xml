@@ -1,0 +1,84 @@
+<launch>
+    <!-- ELRS Joy node (FT232RL @ 420000 baud, CRSF CRC-8 enabled).
+         FT232RL hits 420000 baud exactly, so CRSF runs at its native rate with
+         CRC-8 (poly 0xD5) validation. This catches garbage frames born from
+         connector noise / vibration transients with probability ~99.6%.
+
+         Compare CRC ON vs OFF on the same hardware:
+           ros2 launch elrs_joy elrs_joy.launch.xml enable_crc:=true
+           ros2 launch elrs_joy elrs_joy.launch.xml enable_crc:=false
+         Then watch:
+           ros2 topic echo /elrs_joy_node/debug_stats
+           (or the periodic 10s log line) -->
+    <arg name="enable_crc"     default="true"/>
+    <arg name="port"           default="/dev/ELRS_FT232"/>
+    <arg name="baud_rate"      default="420000"/>
+    <arg name="debug_stats_hz" default="1.0"/>
+    <!-- RB latency-zero safety guard (predicates 1 + 4).
+         rb_stability_frames: PRE-window length in frames @100Hz for the
+           "no dip in the released hold band" predicate. 10 = 0.1s.
+         rb_released_min:     RB raw threshold above which the channel counts
+           as "in the released band" for stability (CH6 mapping, 992 = mid).
+         rb_jerk_max:         max |delta| on CH0/CH2 (steer/throttle) between
+           the rising tick and the previous valid frame. 200 ~= +/-11% of scale. -->
+    <arg name="rb_stability_frames" default="10"/>
+    <arg name="rb_released_min"     default="992"/>
+    <arg name="rb_jerk_max"         default="200"/>
+
+    <node name="elrs_joy_node" pkg="elrs_joy" exec="elrs_joy_node" output="screen">
+        <!-- Serial port settings (FT232RL @ /dev/ELRS_FT232, full CRSF baud) -->
+        <param name="port"           value="$(var port)"/>
+        <param name="baud_rate"      value="$(var baud_rate)"/>
+        <param name="enable_crc"     value="$(var enable_crc)"/>
+        <param name="debug_stats_hz" value="$(var debug_stats_hz)"/>
+        <param name="rb_stability_frames" value="$(var rb_stability_frames)"/>
+        <param name="rb_released_min"     value="$(var rb_released_min)"/>
+        <param name="rb_jerk_max"         value="$(var rb_jerk_max)"/>
+
+        <!-- Publish rate (Hz) -->
+        <param name="publish_rate" value="100"/>
+
+        <!-- Xbox-compatible Joy message: 8 axes, 11 buttons -->
+        <param name="num_axes" value="8"/>
+        <param name="num_buttons" value="11"/>
+
+        <!-- Axis mapping: joy_index -> CRSF channel.
+             axes[1]=Throttle(CH1), axes[3]=Steering(CH3) -->
+        <param name="axes_joy_indices"   value="[1, 3]"/>
+        <param name="axes_crsf_channels" value="[2, 0]"/>
+        <!-- Axis sign: [throttle, steering], -1.0 to invert -->
+        <param name="axes_invert" value="[1.0, -1.0]"/>
+        <!-- Per-axis CRSF calibration. Order matches axes_crsf_channels:
+             [throttle(CH2), steering(CH0)]. -->
+        <param name="axes_cal_min" value="[174, 174]"/>
+        <param name="axes_cal_mid" value="[1007, 992]"/>
+        <param name="axes_cal_max" value="[1811, 1773]"/>
+
+        <!-- Button mapping: joy_index -> CRSF channel.
+             buttons[0]=A(CH7, latched, invert=1), buttons[4]=LB(CH5), buttons[5]=RB(CH6) -->
+        <param name="button_joy_indices"   value="[0, 4, 5]"/>
+        <param name="button_crsf_channels" value="[7, 5, 6]"/>
+        <param name="button_invert"        value="[1, 0, 0]"/>
+
+        <!-- Button threshold (CRSF value, below=pressed) -->
+        <param name="button_threshold" value="992"/>
+
+        <!-- Deadzone for axes (0.0 ~ 1.0) -->
+        <param name="deadzone" value="0.05"/>
+
+        <!-- Failsafe timeout (seconds) -->
+        <param name="failsafe_timeout" value="0.5"/>
+
+        <!-- LB 3-position safety guard -->
+        <param name="lb_pressed_max"     value="350"/>
+        <param name="lb_idle_min"        value="700"/>
+        <param name="lb_idle_max"        value="1300"/>
+        <param name="lb_released_min"    value="1600"/>
+        <param name="lb_debounce_frames" value="5"/>
+
+        <!-- A button N-frame debounce -->
+        <param name="a_debounce_frames"  value="5"/>
+
+        <param name="frame_id" value="elrs_joy"/>
+    </node>
+</launch>
