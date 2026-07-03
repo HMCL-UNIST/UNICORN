@@ -413,11 +413,22 @@ class ChangeAvoidanceNode(Node):
                 d_apex_left = 0
             return "left", d_apex_left, left_gap, right_gap
         elif left_gap < min_space and right_gap < min_space:
-            # self.get_logger().warn("No enough gap!")
+            # Both sides too narrow: genuinely no room -> don't overtake.
             return None, 0.0, left_gap, right_gap
         else:
-            # self.get_logger().warn("This happen!")
-            return None, 0.0, left_gap, right_gap
+            # Both sides wide enough: pick the wider one instead of giving up (old code returned
+            # None here, so a clearly-open side was wasted). Only the ambiguous "both open" case
+            # falls here; the "both narrow" case above still returns None.
+            if left_gap >= right_gap:
+                d_apex_left = obstacle.d_left + (self.width_car / 2 + self.safety_margin + 0.2)
+                if d_apex_left < 0 and left_gap < abs(d_apex_left):
+                    d_apex_left = 0
+                return "left", d_apex_left, left_gap, right_gap
+            else:
+                d_apex_right = obstacle.d_right - (self.width_car / 2 + self.safety_margin + 0.2)
+                if d_apex_right > 0 and right_gap < abs(d_apex_right):
+                    d_apex_right = 0
+                return "right", d_apex_right, left_gap, right_gap
 
     ### Visualize SPL Rviz ###
     def visualize_dynamic_spliner(self, evasion_s, evasion_d, evasion_x, evasion_y, evasion_v):
@@ -746,6 +757,17 @@ class ChangeAvoidanceNode(Node):
 
         outer_s, outer_d = self.converter.get_frenet(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1])
         inner_s, inner_d = self.converter.get_frenet(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1])
+
+        # Robustness: the xy-normal above ([sin,-cos]) assumes a specific psi convention/track
+        # direction (CW vs CCW), so "outer" can come out on the wrong side. Downstream this
+        # module treats outer_lane as the LEFT (+d) lane (preferred_side=="left" -> outer). f1tenth
+        # frenet has d>0 to the left, so if the measured mean d of outer is negative the lanes are
+        # flipped -> swap them. This keeps left/right correct for any map orientation.
+        if np.mean(outer_d) < np.mean(inner_d):
+            outer_lane_resampled, inner_lane_resampled = inner_lane_resampled, outer_lane_resampled
+            outer_s, inner_s = inner_s, outer_s
+            outer_d, inner_d = inner_d, outer_d
+            self.get_logger().info("[Planner] outer/inner lanes swapped to match frenet +d=left convention")
 
         outer_lane_resampled_psi, outer_lane_resampled_kappa = tph.calc_head_curv_num.calc_head_curv_num(
                 path=outer_lane_resampled,
