@@ -16,7 +16,6 @@
   <arg name="vehicle_config" default="$(find-pkg-share stack_master)/config/CAR/vehicle_config.yaml"/>
   <arg name="use_estop"     default="false"        description="Use emergency stop (true) or not (false)"/>
   <arg name="virtual"       default="false"        description="Inject virtual opponent/obstacles (scan overlay etc.) onto the real LiDAR"/>
-  <arg name="keyboard_teleop" default="true"      description="Make the mux honour keyboard teleop (/joy_keyboard); run keyboard_joy_node on the operator laptop"/>
 
   <let name="maps_dir"                value="$(find-pkg-share stack_master)/maps"/>
   <let name="map_path"                value="$(var maps_dir)/$(var map)/$(var map)"/>
@@ -29,7 +28,6 @@
     <arg name="vehicle_config" value="$(var vehicle_config)"/>
     <arg name="use_estop"      value="$(var use_estop)"/>
     <arg name="virtual"        value="$(var virtual)"/>
-    <arg name="keyboard_teleop" value="$(var keyboard_teleop)"/>
   </include>
 
   <!-- Map relay: periodically republishes /map so remote subscribers (RViz) receive it.

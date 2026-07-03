@@ -15,6 +15,8 @@ import numpy as np
 from datetime import datetime
 import os
 
+import pitwall  # one-line telemetry: pitwall.log(...) -> /pitwall/<key>, pitwall.event(...) -> /pitwall/events
+
 
 class LapAnalyser(Node):
     def __init__(self):
@@ -23,6 +25,10 @@ class LapAnalyser(Node):
                          automatically_declare_parameters_from_overrides=True)
 
         self.get_logger().info("Lap_analyser node started")
+
+        # Bind pitwall telemetry to this node so lap metrics get recorded to the
+        # pitwall MCAP (cheap no-op unless a recorder is subscribed to /pitwall/*).
+        pitwall.init(self)
 
         # Where to place the lap-stats text marker. ROS1 blocked here with
         # wait_for_message("/state_marker") to grab the state machine's marker pose;
@@ -228,6 +234,15 @@ class LapAnalyser(Node):
         self.lat_err_acc.append(msg.average_lateral_error_to_global_waypoints)
         self.max_lat_err_acc.append(msg.max_lateral_error_to_global_waypoints)
 
+        # pitwall telemetry: record the lap metrics (to MCAP / Foxglove when a
+        # recorder is up; no-op otherwise). Fires every lap, independent of the
+        # RViz text marker below (which is skipped until /state_marker is seen).
+        pitwall.log("lap/time", msg.lap_time)
+        pitwall.log("lap/count", self.lap_count)
+        pitwall.log("lap/avg_lateral_error", msg.average_lateral_error_to_global_waypoints)
+        pitwall.log("lap/max_lateral_error", msg.max_lateral_error_to_global_waypoints)
+        pitwall.event(f"lap {self.lap_count} completed: {msg.lap_time:.3f}s")
+
         mark = Marker()
         mark.header.stamp = self.get_clock().now().to_msg()
         mark.header.frame_id = 'map'
@@ -256,6 +271,7 @@ class LapAnalyser(Node):
         min_msg = Float32()
         min_msg.data = float(np.min(self.car_distance_to_boundary))
         self.min_car_distance_to_boundary_pub.publish(min_msg)
+        pitwall.log("lap/min_dist_to_boundary", min_msg.data)
 
     def publish_odom_marker(self):
         # Publish the trajectory marker for the current lap using stored odom points
