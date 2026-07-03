@@ -121,6 +121,7 @@ class Controller:
         self.i_gap = 0
         self.trailing_command = 2
         self.speed_command = None
+        self.last_valid_speed = 0
         self.curvature_waypoints = 0
         self.current_steer_command = 0
         self.yaw_rate = 0
@@ -191,16 +192,21 @@ class Controller:
 
         # POSTPROCESS for acceleration/speed decision
 
-        if self.speed_command is not None:
+        # Only advance the last-valid anchor on a finite command; np.isfinite
+        # keeps a NaN/inf speed (e.g. from an empty curvature slice when the car
+        # runs off a stale frozen local path) from reaching VESC/sim, which has
+        # no guard and would poison odom. Mirrors the steering safety net below.
+        if self.speed_command is not None and np.isfinite(self.speed_command):
             speed = max(self.speed_command, 0)
+            self.last_valid_speed = speed
             acceleration = 0
             jerk = 0
 
         else:
-            speed = 0
+            speed = self.last_valid_speed
             jerk = 0
             acceleration = 0
-            self.logger_warn("[Controller] speed was none")
+            self.logger_warn("[Controller] non-finite/none speed; holding last valid speed")
 
         ### LATERAL CONTROL ###
 
