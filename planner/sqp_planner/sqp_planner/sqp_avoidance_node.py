@@ -311,8 +311,14 @@ class SQPAvoidanceNode(Node):
         danger_flag = False
         # Get the initial guess of the overtaking side (see spliner)
         initial_guess_object = self.group_objects(considered_obs)
-        initial_guess_object_start_idx = np.abs(self.scaled_wpnts - initial_guess_object.s_start).argmin()
-        initial_guess_object_end_idx = np.abs(self.scaled_wpnts - initial_guess_object.s_end).argmin()
+        # BUGFIX: scaled_wpnts is (N,2) [[s,d],...]. Subtracting a scalar from the whole 2D
+        # array and calling argmin() returns a FLATTENED index (0..2N-1) that mixes the s and
+        # d columns and is ~2x the real waypoint index. Downstream (gb_idxs, scaled_wpnts_msg
+        # indexing) then reads the wrong / out-of-range waypoints, so the solver only produced
+        # a valid path near s=0 (where the 2x error is small). Slice the s column ONLY, exactly
+        # like the scaled_wpnts_indices computation further down.
+        initial_guess_object_start_idx = np.abs(self.scaled_wpnts[:, 0] - initial_guess_object.s_start).argmin()
+        initial_guess_object_end_idx = np.abs(self.scaled_wpnts[:, 0] - initial_guess_object.s_end).argmin()
         # Get array of indexes of the global waypoints overlapping with the ROC
         gb_idxs = np.array(range(initial_guess_object_start_idx, initial_guess_object_start_idx + (initial_guess_object_end_idx - initial_guess_object_start_idx)%self.scaled_max_idx))%self.scaled_max_idx
         # If the ROC is too short, we take the next 20 waypoints
