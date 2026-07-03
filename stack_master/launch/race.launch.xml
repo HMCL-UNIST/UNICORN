@@ -27,8 +27,8 @@
        description="WpntArray the controller follows: /local_waypoints (state-machine output w/ avoidance) or /global_waypoints (robust raceline)"/>
   <arg name="vis_lane_change" default="false"
        description="Show lane_change_planner's matplotlib lane-visualization window at startup (blocks on plt.show()); off by default"/>
-  <arg name="dynamic_avoidance_mode" default="SQP"
-       description="Dynamic (overtake) planner to run: Change (lane_change_planner, ROS1 default) or SQP (sqp_planner). Both publish /planner/avoidance/otwpnts + /planner/avoidance/merger and their own update_waypoints, so they are drop-in swappable."/>
+  <arg name="dynamic_avoidance_mode" default="Change"
+       description="Dynamic (overtake) planner to run: Change (lane_change_planner) or SQP (sqp_planner). Both publish /planner/avoidance/otwpnts + /planner/avoidance/merger and their own update_waypoints, so they are drop-in swappable."/>
   <!-- sim -> SIM config (racecar_f110.ini + veh_dyn_info); real hardware -> CAR. Folder name == racecar_version. -->
   <let name="racecar_version" value="SIM" if="$(var sim)"/>
   <let name="racecar_version" value="CAR" unless="$(var sim)"/>

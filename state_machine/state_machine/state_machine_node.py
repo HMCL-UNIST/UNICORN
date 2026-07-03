@@ -345,6 +345,9 @@ class StateMachine(Node):
         self.loc_wpnt_pub = self.create_publisher(WpntArray, "local_waypoints", 1)
         self.vis_loc_wpnt_pub = self.create_publisher(MarkerArray, "local_waypoints/markers", 10)
         self.state_pub = self.create_publisher(String, "state_machine", 1)
+        # Per-loop diagnostic snapshot (JSON) for offline/live debugging of the
+        # local_wpnts source selection and stale-cache leaks.
+        self.debug_pub = self.create_publisher(String, "/state_machine/debug", 10)
         self.state_mrk = self.create_publisher(Marker, "/state_marker", 10)
         self.emergency_pub = self.create_publisher(Marker, "/emergency_marker", 5)
         self.ot_section_check_pub = self.create_publisher(Bool, "/ot_section_check", 1)
@@ -1113,6 +1116,58 @@ class StateMachine(Node):
     #######
     # VIZ #
     #######
+    def _publish_debug(self, local_wpnts):
+        # Emit a per-loop JSON snapshot on /state_machine/debug capturing the
+        # full local_wpnts source-selection state. Purpose: catch a stale source
+        # cache (e.g. cur_recovery_wpnts frozen at an old snapshot while the raw
+        # recovery topic keeps advancing) leaking into local_wpnts, and the
+        # controller-poisoning "car ran off the end of a frozen local path"
+        # condition (idx near the tail -> empty curvature slice -> NaN).
+        def s0(wpnts):
+            return round(wpnts[0].s_m, 3) if wpnts else None
+
+        first_s = local_wpnts[0].s_m if local_wpnts else None
+        last_s = local_wpnts[-1].s_m if local_wpnts else None
+        # frenet gap between car and where the emitted local path starts (wrap-safe)
+        gap = None
+        if first_s is not None and self.track_length:
+            ds = (first_s - self.cur_s) % self.track_length
+            gap = round(min(ds, self.track_length - ds), 3)
+
+        rec = self.cur_recovery_wpnts
+        avoid = self.cur_avoidance_wpnts
+        snap = {
+            "t": round(self.now_sec(), 3),
+            "src": self.local_wpnts_src.name,
+            "state": self.cur_state.name,
+            "cur_s": round(self.cur_s, 3),
+            "cur_d": round(self.cur_d, 4),
+            "cur_vs": round(self.cur_vs, 3),
+            "close_to_raceline": bool(self._check_close_to_raceline(0.05)
+                                      * self._check_close_to_raceline_heading(20)),
+            "n_obs": len(self.cur_obstacles_in_interest),
+            "local_first_s": None if first_s is None else round(first_s, 3),
+            "local_last_s": None if last_s is None else round(last_s, 3),
+            "local_n": len(local_wpnts) if local_wpnts else 0,
+            "start_gap_m": gap,  # >~2m means a stale cache leaked in
+            "recovery": {
+                "topic_s": s0(self.recovery_wpnts.wpnts) if self.recovery_wpnts is not None else None,
+                "cache_s": s0(rec.list),
+                "cache_last_s": round(rec.list[-1].s_m, 3) if rec.list else None,
+                "cache_age": (None if rec.stamp is None
+                              else round(self.now_sec() - time_to_float(rec.stamp), 3)),
+                "is_init": rec.is_init,
+            },
+            "avoidance": {
+                "topic_s": s0(self.avoidance_wpnts.wpnts) if self.avoidance_wpnts is not None else None,
+                "cache_s": s0(avoid.list),
+                "cache_age": (None if avoid.stamp is None
+                              else round(self.now_sec() - time_to_float(avoid.stamp), 3)),
+                "is_init": avoid.is_init,
+            },
+        }
+        self.debug_pub.publish(String(data=json.dumps(snap)))
+
     def _pub_local_wpnts(self, wpts):
         # DELETEALL as the first element of the SAME array (atomic clear+draw in
         # one message) instead of a separate publish, so RViz2 doesn't flicker.
@@ -1393,6 +1448,8 @@ class StateMachine(Node):
         self.behavior_strategy.overtaking_targets = self.get_overtaking_target()
 
         local_wpnts = self.states[self.local_wpnts_src](self)
+
+        self._publish_debug(local_wpnts)
 
         if self.cur_state == StateType.LOSTLINE:
             self.cur_state = StateType.GB_TRACK

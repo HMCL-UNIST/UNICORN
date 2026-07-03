@@ -15,8 +15,8 @@ class DynamicPredictionTuner(Node):
     def __init__(self):
         super().__init__('dynamic_prediction_tuner_node')
         for name, default in {
-            'n_time_steps': 200,
-            'dt': 0.02,
+            'n_time_steps': 100,
+            'dt': 0.01,
             'save_distance_front': 0.6,
             'max_expire_counter': 10,
             'update_waypoints': True,
