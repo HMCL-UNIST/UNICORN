@@ -40,6 +40,7 @@ install(PROGRAMS
   scripts/keyboard_joy_node.py
   scripts/global_velocity_planner.py
   scripts/static_tf_publisher.py
+  scripts/vesc_calibration_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

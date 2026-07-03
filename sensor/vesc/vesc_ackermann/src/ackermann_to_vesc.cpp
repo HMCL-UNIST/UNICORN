@@ -33,6 +33,7 @@
 #include <cmath>
 #include <sstream>
 #include <string>
+#include <vector>
 
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
 #include <std_msgs/msg/float64.hpp>
@@ -62,6 +63,31 @@ AckermannToVesc::AckermannToVesc(const rclcpp::NodeOptions & options)
   // subscribe to ackermann topic
   ackermann_sub_ = create_subscription<AckermannDriveStamped>(
     "ackermann_cmd", 10, std::bind(&AckermannToVesc::ackermannCmdCallback, this, _1));
+
+  // apply gain/offset changes at runtime (ros2 param set, or the vesc_calibration
+  // node's apply), so retuning takes effect without restarting this node.
+  param_cb_handle_ = add_on_set_parameters_callback(
+    std::bind(&AckermannToVesc::onSetParameters, this, _1));
+}
+
+rcl_interfaces::msg::SetParametersResult AckermannToVesc::onSetParameters(
+  const std::vector<rclcpp::Parameter> & params)
+{
+  for (const auto & p : params) {
+    const auto & name = p.get_name();
+    if (name == "speed_to_erpm_gain") {
+      speed_to_erpm_gain_ = p.as_double();
+    } else if (name == "speed_to_erpm_offset") {
+      speed_to_erpm_offset_ = p.as_double();
+    } else if (name == "steering_angle_to_servo_gain") {
+      steering_to_servo_gain_ = p.as_double();
+    } else if (name == "steering_angle_to_servo_offset") {
+      steering_to_servo_offset_ = p.as_double();
+    }
+  }
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  return result;
 }
 
 void AckermannToVesc::ackermannCmdCallback(const AckermannDriveStamped::SharedPtr cmd)

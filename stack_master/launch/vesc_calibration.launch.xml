@@ -1,0 +1,70 @@
+<?xml version="1.0"?>
+<!--
+  vesc_calibration.launch.xml — fit the VESC speed/steering mapping from external
+  odometry, with live telemetry to pitwall and optional rqt manual drive.
+
+  This brings up the localization stack itself (sensors + simple_mux + the chosen
+  localizer publishing /car_state/odom) and then the calibrator on top:
+
+    ros2 launch stack_master vesc_calibration.launch.xml map:=YOURMAP
+    ros2 launch stack_master vesc_calibration.launch.xml map:=YOURMAP localization:=kiss
+
+  There is no mode: set ONE point (cmd_speed, cmd_steer) live in rqt and press the
+  joystick autodrive button to drive it and record a sample, classified by its
+  steering value (steering~=0 -> speed/eRPM + straightness; steering!=0 -> servo).
+  Repeat with new values to build the fit; the ~/reset service clears the dataset.
+
+  Already have localization running? Skip the bringup:
+    ros2 launch stack_master vesc_calibration.launch.xml use_localization:=false
+
+  Record the run into one MCAP for Foxglove (optional):
+    ros2 launch pitwall record.launch.py output_dir:=~/runs/calib \
+        topic_regex:='/pitwall/.*|/vesc/.*|/car_state/odom'
+
+  The calibrator publishes ordinary Ackermann commands to the mux's autodrive
+  input. There is NO start service: the joystick is the start.
+    - Press AUTODRIVE on the joystick: this arms the mux to forward our commands
+      AND starts the calibration run (perfectly in sync).
+    - EMERGENCY / STOP: the humandrive deadman aborts the run and simple_mux hands
+      the car back to you. (A ~/stop Trigger service also exists for headless use.)
+
+  rqt is OFF by default (you usually reach the car over SSH): run the GUI on your
+  LOCAL machine instead, pointed at the car's ROS graph:
+    ros2 run rqt_reconfigure rqt_reconfigure
+-->
+<launch>
+  <arg name="map"            default=""     description="Map name (required unless use_localization:=false)"/>
+  <arg name="localization"  default="cartographer" description="Localizer for odom: cartographer | pf | kiss"/>
+  <arg name="use_localization" default="true" description="Bring up the localization stack here (false = already running)"/>
+  <arg name="vehicle_config" default="$(find-pkg-share stack_master)/config/CAR/vehicle_config.yaml"/>
+  <arg name="rqt"            default="false" description="Open rqt_reconfigure locally instead (default off; SSH-friendly)"/>
+
+  <!-- Localization stack: sensors + simple_mux (emergency joy) + localizer -> /car_state/odom -->
+  <include file="$(find-pkg-share stack_master)/launch/localization.launch.xml"
+           if="$(var use_localization)">
+    <arg name="map"            value="$(var map)"/>
+    <arg name="localization"   value="$(var localization)"/>
+    <arg name="vehicle_config" value="$(var vehicle_config)"/>
+    <!-- keyboard teleop off; emergency drive is the physical joystick via simple_mux -->
+    <arg name="keyboard_teleop" value="false"/>
+  </include>
+
+  <node pkg="stack_master" exec="vesc_calibration_node.py" name="vesc_calibration" output="screen">
+    <!-- wheelbase (and any /** defaults) come from the vehicle config -->
+    <param from="$(var vehicle_config)"/>
+    <!-- No mode: the node classifies each command point by its steering value.
+         Override the point set with cmd_speeds / cmd_steers if needed. -->
+    <!-- external odom = ground truth (NOT /vesc/odom, which is circular for speed) -->
+    <param name="odom_topic" value="/car_state/odom"/>
+    <!-- read the gains the car is actually running from the ackermann node -->
+    <param name="source_node" value="/vesc/ackermann_to_vesc_node"/>
+    <!-- ~/save (or the save_config rqt toggle) writes calibrated gains back here.
+         The installed path is a symlink to the repo source, so the save persists. -->
+    <param name="vehicle_config_path" value="$(var vehicle_config)"/>
+  </node>
+
+  <!-- rqt_reconfigure: set manual_enable / manual_speed / manual_steering live.
+       Off by default — prefer running it on your local machine over SSH. -->
+  <node pkg="rqt_reconfigure" exec="rqt_reconfigure" name="rqt_reconfigure"
+        if="$(var rqt)" output="screen"/>
+</launch>
