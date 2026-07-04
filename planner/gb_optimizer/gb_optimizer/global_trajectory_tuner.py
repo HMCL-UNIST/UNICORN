@@ -509,6 +509,29 @@ class GlobalTrajTuner(Node):
             if idx % self.sampling_step == 0:
                 int_marker.description = f"v : {vx_mps:.2f}"
                 self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_z", 1., 0., 1., 0.)
+                # Per-axis arrows: X/Y like the vel z-axis arrow
+                self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_x", 1., 1., 0., 0.)
+                self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_y", 1., 0., 0., 1.)
+                # Free XY-plane drag (normal = z axis) with a small dedicated handle
+                xy_control = InteractiveMarkerControl()
+                xy_control.always_visible = True
+                xy_control.name = "move_xy"
+                xy_control.orientation.w = 1.
+                xy_control.orientation.x = 0.
+                xy_control.orientation.y = 1.
+                xy_control.orientation.z = 0.
+                xy_control.interaction_mode = InteractiveMarkerControl.MOVE_PLANE
+                xy_handle = Marker()
+                xy_handle.type = Marker.SPHERE
+                xy_handle.scale.x = 0.18
+                xy_handle.scale.y = 0.18
+                xy_handle.scale.z = 0.06
+                xy_handle.color.r = 0.0
+                xy_handle.color.g = 0.0
+                xy_handle.color.b = 1.0
+                xy_handle.color.a = 0.9
+                xy_control.markers.append(xy_handle)
+                int_marker.controls.append(xy_control)
 
             # Insert the marker into the server
             self.server.insert(int_marker, feedback_callback=self.process_feedback)
