@@ -526,10 +526,16 @@ class ChangeAvoidanceNode(Node):
         max_kappa = np.max(np.abs(kappas))
         outside = "left" if np.sum(kappas) < 0 else "right"
 
-        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside
+        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside.
+        # s_start/s_end are already unwrapped-forward here, so obs_len is a small positive span
+        # (no modulo needed); the enlongation is capped so a corner's max_kappa can't blow s_end
+        # up by ~a lap and make the path circle the track.
         if side == outside:
             for i in range(len(considered_obs)):
-                considered_obs[i].s_end = considered_obs[i].s_end + (considered_obs[i].s_end - considered_obs[i].s_start) % self.max_s_updated * max_kappa * (self.width_car + self.evasion_dist)
+                obs_len = considered_obs[i].s_end - considered_obs[i].s_start
+                enlongation = obs_len * max_kappa * (self.width_car + self.evasion_dist)
+                enlongation = min(enlongation, self.scaled_max_s * 0.15)
+                considered_obs[i].s_end = considered_obs[i].s_end + enlongation
 
         # obs.s_* are unwrapped forward-of-car (can exceed scaled_max_s), so seed with +/-inf.
         min_s_obs_start = np.inf
@@ -601,6 +607,7 @@ class ChangeAvoidanceNode(Node):
         obs_start_u = min(o.s_start for o in considered_obs)
         obs_end_u = max(o.s_end for o in considered_obs)
         end_s = obs_end_u + self.back_to_raceline_after
+        end_s = min(end_s, start_s + self.scaled_max_s * 0.5)
 
         n_samples = max(int((end_s - start_s) / self.scaled_delta_s), 5)
         s_lin = np.linspace(start_s, end_s, n_samples)            # monotonic, unwrapped
