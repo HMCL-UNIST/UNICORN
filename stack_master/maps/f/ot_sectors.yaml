@@ -1,23 +1,15 @@
 ot_sector_tuner:
   ros__parameters:
     save_params: false
-    n_sectors: 4
+    n_sectors: 2
     yeet_factor: 1.25
     spline_len: 30
     ot_sector_begin: 0.5
     Overtaking_sector0:
       start: 0
-      end: 189
+      end: 366
       ot_flag: false
     Overtaking_sector1:
-      start: 190
-      end: 284
-      ot_flag: false
-    Overtaking_sector2:
-      start: 285
-      end: 394
-      ot_flag: false
-    Overtaking_sector3:
-      start: 395
-      end: 773
+      start: 367
+      end: 778
       ot_flag: false
