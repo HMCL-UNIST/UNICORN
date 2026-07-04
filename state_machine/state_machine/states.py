@@ -20,7 +20,7 @@ def GlobalTracking(state_machine: "StateMachine") -> List[Wpnt]:
 
 
 def Overtaking(state_machine: "StateMachine") -> List[Wpnt]:
-    if state_machine.ot_planner == "spliner" or state_machine.ot_planner == "predictive_spliner":
+    if state_machine.ot_planner == "spliner" or state_machine.ot_planner == "sqp" or state_machine.ot_planner == "lane_change":
         return state_machine.get_splini_wpts()
     else:
         s = state_machine.cur_id_ot

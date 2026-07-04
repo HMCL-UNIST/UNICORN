@@ -81,6 +81,11 @@ class WaypointData:
         self.free_dbg = None
         self.is_closed = is_closed
         self.vel_planner_safety_factor = 1.0
+        # When frozen, the cache is NOT re-initialized from fresh planner output; the
+        # path captured on entry is kept and only sliced (tail trimmed) as the car
+        # advances. Used to hold one blended-recovery path while trailing on it, so the
+        # controller target stops jumping every frame (see _hold_recovery_freeze).
+        self.frozen = False
         self.update_param()
 
     def update_param(self):
@@ -189,6 +194,8 @@ class StateMachine(Node):
         self.current_position = None
         self.gb_wpnts = None
         self.recovery_wpnts = None
+        self._recovery_plain = None
+        self._recovery_blended = None
         self.gb_max_idx = None
         self.wpnt_dist = self.waypoints_dist
         self.num_glb_wpnts = 0
@@ -200,6 +207,7 @@ class StateMachine(Node):
         self.lateral_width_gb_m = self.params.lateral_width_gb_m
         self.gb_horizon_m = self.params.gb_horizon_m
         self.interest_horizon_m = self.params.interest_horizon_m
+        self.overtake_min_closing_mps = self.params.overtake_min_closing_mps
 
         self.last_recovery_update_time = None
         self.cur_gb_wpnts = WaypointData(self, "global_tracking", True)
@@ -240,6 +248,7 @@ class StateMachine(Node):
         self.obstacles_perception = []
         self.obstacles_prediction_id = None
         self.obstacles_prediction = []
+        self.prediction_dt = 0.02  # updated from PredictionArray.dt; matches predictor
         self.ego_prediction = []
         self.obstacle_was_here = True
         self.side_by_side_threshold = 0.6
@@ -323,6 +332,8 @@ class StateMachine(Node):
 
         self.create_subscription(WpntArray, "/global_waypoints_scaled", self.glb_wpnts_cb, qos)
         self.create_subscription(WpntArray, "/planner/recovery/wpnts", self.recovery_wpnts_cb, qos)
+        self.create_subscription(
+            WpntArray, "/planner/ot_blended_recovery/wpnts", self.ot_blended_recovery_cb, qos)
         self.create_subscription(WpntArray, "/global_waypoints/overtaking", self.overtake_cb, qos)
         self._wait_for_attr("gb_wpnts", "/global_waypoints_scaled")
         self._wait_for_attr("overtake_wpnts", "/global_waypoints/overtaking")
@@ -336,15 +347,15 @@ class StateMachine(Node):
         )
         self.create_subscription(PredictionArray, "/mpc_controller/ego_prediction", self.ego_prediction_cb, qos)
 
-        if self.ot_planner == "spliner" or self.ot_planner == "predictive_spliner":
+        if self.ot_planner == "spliner" or self.ot_planner == "sqp" or self.ot_planner == "lane_change":
             self.create_subscription(OTWpntArray, "/planner/avoidance/otwpnts", self.avoidance_cb, qos)
-            if self.ot_planner == "predictive_spliner":
+            if self.ot_planner == "sqp" or self.ot_planner == "lane_change":
                 self.create_subscription(
                     OTWpntArray, "/planner/avoidance/static_otwpnts", self.static_avoidance_cb, qos
                 )
-        if self.ot_planner == "predictive_spliner":
+        if self.ot_planner == "sqp" or self.ot_planner == "lane_change":
             self.create_subscription(Float32MultiArray, "/planner/avoidance/merger", self.merger_cb, qos)
-            self.create_subscription(Bool, "collision_prediction/force_trailing", self.force_trailing_cb, qos)
+            self.create_subscription(Bool, "/opponent_prediction/force_trailing", self.force_trailing_cb, qos)
             self.create_subscription(Bool, "planner/avoidance/fail_trailing", self.fail_trailing_cb, qos)
 
         if not self.params.sim:
@@ -578,7 +589,44 @@ class StateMachine(Node):
     def recovery_wpnts_cb(self, data: WpntArray):
         if len(data.wpnts) != 0:
             self.update_velocity(data, self.cur_recovery_wpnts.vel_planner_safety_factor)
-        self.recovery_wpnts = data
+        self._recovery_plain = data
+        self._select_recovery_source()
+
+    def ot_blended_recovery_cb(self, data: WpntArray):
+        # OT-blended recovery: OT heading for the first ~1 m then splined to GB.
+        # Published every loop by recovery_spliner (empty when no OT path). When it
+        # carries a valid path we prefer it over plain recovery so the RECOVERY src
+        # keeps the overtake line instead of snapping straight to GB.
+        if len(data.wpnts) != 0:
+            self.update_velocity(data, self.cur_recovery_wpnts.vel_planner_safety_factor)
+        self._recovery_blended = data
+        self._select_recovery_source()
+
+    def _select_recovery_source(self):
+        # recovery_wpnts feeds _check_latest_wpnts (freshness + on-spline). Prefer the
+        # blended path when it is fresh and non-empty, else fall back to plain recovery.
+        # While the recovery cache is frozen (held path in use), don't swap the source
+        # from under it -- the freeze in _check_latest_wpnts keeps the captured cache.
+        if self.cur_recovery_wpnts.frozen:
+            return
+        blended = self._recovery_blended
+        if blended is not None and len(blended.wpnts) != 0 and (
+            self.now_sec() - time_to_float(blended.header.stamp)
+        ) <= self.cur_recovery_wpnts.latest_threshold:
+            self.recovery_wpnts = blended
+        else:
+            self.recovery_wpnts = self._recovery_plain
+
+    def _hold_recovery_freeze(self):
+        # Called once per loop after the src is decided. Freeze the recovery cache while
+        # RECOVERY is the active source; release it the moment the src leaves RECOVERY so
+        # the next entry captures a fresh path.
+        if self.local_wpnts_src == StateType.RECOVERY:
+            # On entry the cache was just re-inited with fresh output (frozen was False
+            # during this loop's transition); now latch it so later loops hold it.
+            self.cur_recovery_wpnts.frozen = True
+        else:
+            self.cur_recovery_wpnts.frozen = False
 
     def avoidance_cb(self, data: OTWpntArray):
         if len(data.wpnts) != 0:
@@ -646,6 +694,11 @@ class StateMachine(Node):
         if len(data.predictions) != 0:
             self.obstacles_prediction_id = data.id
             self.obstacles_prediction = data.predictions
+            # Time step between consecutive predictions, carried on the message so the
+            # ttc->prediction-index conversion in _check_free_frenet stays in sync with
+            # the predictor's dt (falls back to the last known dt if a msg omits it).
+            if data.dt > 0.0:
+                self.prediction_dt = data.dt
         else:
             self.obstacles_prediction = []
 
@@ -727,6 +780,11 @@ class StateMachine(Node):
         return False
 
     def _check_latest_wpnts(self, src_wpnts, wpnts_data: WaypointData):
+        # Frozen cache: keep the captured path, do NOT replace it with fresh output.
+        # Stay "available" as long as we are still on the held path (on_spline); once
+        # the car runs off its tail the freeze naturally lapses to unavailable.
+        if wpnts_data.frozen:
+            return bool(wpnts_data.is_init and self._check_on_spline(wpnts_data))
         if src_wpnts is None or len(src_wpnts.wpnts) == 0:
             return False
         elif (self.now_sec() - time_to_float(src_wpnts.header.stamp)) > wpnts_data.latest_threshold:
@@ -783,7 +841,7 @@ class StateMachine(Node):
                 obs_s = obs.s_center
                 gap = (obs_s - self.cur_s) % self.max_s
                 relative_vs = self.cur_vs - obs.vs
-                clip_vs = max(relative_vs, 0.5)
+                clip_vs = max(relative_vs, self.overtake_min_closing_mps)
                 ttc = (gap - self.pars["veh_params"]["length"]) / clip_vs
                 tt0 = (gap + 0.3 * self.pars["veh_params"]["length"]) / clip_vs
 
@@ -829,9 +887,9 @@ class StateMachine(Node):
                         end_idx = len(obstacle_predictions)
                         if is_ot_wpnts:
                             if ttc > 0:
-                                start_idx = min(int(ttc / 0.05), len(obstacle_predictions))
+                                start_idx = min(int(ttc / self.prediction_dt), len(obstacle_predictions))
                             if tt0 > 0:
-                                end_idx = min(int(tt0 / 0.05), len(obstacle_predictions))
+                                end_idx = min(int(tt0 / self.prediction_dt), len(obstacle_predictions))
                         worst_fd = None
                         for obs_pred in obstacle_predictions[start_idx:end_idx]:
                             wpnt_idx = np.argmin(abs(wpnts_data.array[:, 2] - obs_pred.pred_s))
@@ -1432,41 +1490,17 @@ class StateMachine(Node):
             return []
 
     def get_farthest_target(self, local_wpnts_src):
+        # TRAILING must NOT hijack the src to OVERTAKE here: overtaking is gated by the
+        # OVERTAKE state (sector/getting_closer/free_frenet). Pulling the raw avoidance
+        # trajectory into local_wpnts while merely trailing would steer the car onto an
+        # un-committed OT line -- exactly what the OT-blended recovery path exists to
+        # avoid. Keep the src the transition chose (GB/RECOVERY); only pick the trailing
+        # target (the farthest-ahead obstacle) off that same source.
         if local_wpnts_src == StateType.GB_TRACK and self.cur_gb_wpnts.closest_target is not None:
-            closest_target = self.cur_gb_wpnts.closest_target
-            closest_gap = self.cur_gb_wpnts.closest_gap
-            if self.cur_avoidance_wpnts.closest_target is not None and closest_gap <= self.cur_avoidance_wpnts.closest_gap:
-                closest_gap = self.cur_avoidance_wpnts.closest_gap
-                closest_target = self.cur_avoidance_wpnts.closest_target
-                local_wpnts_src = StateType.OVERTAKE
-            if self.cur_static_avoidance_wpnts.closest_target is not None and \
-                    closest_gap < self.cur_static_avoidance_wpnts.closest_gap:
-                closest_gap = self.cur_static_avoidance_wpnts.closest_gap
-                closest_target = self.cur_static_avoidance_wpnts.closest_target
-                local_wpnts_src = StateType.OVERTAKE
-            if self.cur_start_wpnts.closest_target is not None and closest_gap < self.cur_start_wpnts.closest_gap:
-                closest_gap = self.cur_start_wpnts.closest_gap
-                closest_target = self.cur_start_wpnts.closest_target
-                local_wpnts_src = StateType.START
-            return [closest_target], local_wpnts_src
+            return [self.cur_gb_wpnts.closest_target], local_wpnts_src
 
         if local_wpnts_src == StateType.RECOVERY and self.cur_recovery_wpnts.closest_target is not None:
-            closest_target = self.cur_recovery_wpnts.closest_target
-            closest_gap = self.cur_recovery_wpnts.closest_gap
-            if self.cur_avoidance_wpnts.closest_target is not None and closest_gap < self.cur_avoidance_wpnts.closest_gap:
-                closest_gap = self.cur_avoidance_wpnts.closest_gap
-                closest_target = self.cur_avoidance_wpnts.closest_target
-                local_wpnts_src = StateType.OVERTAKE
-            if self.cur_static_avoidance_wpnts.closest_target is not None and \
-                    closest_gap < self.cur_static_avoidance_wpnts.closest_gap:
-                closest_gap = self.cur_static_avoidance_wpnts.closest_gap
-                closest_target = self.cur_static_avoidance_wpnts.closest_target
-                local_wpnts_src = StateType.OVERTAKE
-            if self.cur_start_wpnts.closest_target is not None and closest_gap < self.cur_start_wpnts.closest_gap:
-                closest_gap = self.cur_start_wpnts.closest_gap
-                closest_target = self.cur_start_wpnts.closest_target
-                local_wpnts_src = StateType.START
-            return [closest_target], local_wpnts_src
+            return [self.cur_recovery_wpnts.closest_target], local_wpnts_src
 
         return [], local_wpnts_src
 
@@ -1566,7 +1600,9 @@ class StateMachine(Node):
             self.cur_state, self.local_wpnts_src = self.state_transitions[self.cur_state](self)
 
         if self.cur_state == StateType.TRAILING:
-            self.check_ot_cloest_target()
+            # NOTE: check_ot_cloest_target() intentionally NOT called -- it promoted the
+            # src to OVERTAKE while merely trailing (un-committed OT line). See
+            # get_farthest_target for the rationale; overtaking is gated by the state.
             self.behavior_strategy.trailing_targets, self.local_wpnts_src = \
                 self.get_farthest_target(self.local_wpnts_src)
         else:
@@ -1584,6 +1620,12 @@ class StateMachine(Node):
             self._prev_src_cache.is_init = False
             self._prev_src_cache.closest_target = None
         self._prev_src_cache = cur_src_cache
+
+        # Freeze the recovery/blended path while it is the active source: capture it on
+        # entry (the transition already re-inited the cache with fresh output this loop)
+        # and hold that single path until we leave RECOVERY, so the controller target
+        # stops jumping as recovery_spliner re-anchors the blended path every frame.
+        self._hold_recovery_freeze()
 
         local_wpnts = self.states[self.local_wpnts_src](self)
 

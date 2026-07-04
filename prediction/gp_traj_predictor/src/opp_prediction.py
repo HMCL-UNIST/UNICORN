@@ -390,7 +390,7 @@ class OppTrajPredictor(PredictionNode):
                     prediction_obs_arr = ObstacleArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), obstacles=obstacle_list)
                     self.prediction_obs_pub.publish(prediction_obs_arr)
 
-                    prediction_obs_pred_arr = PredictionArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), id=opponent_pos_copy.obstacles[0].id, predictions=prediction_list)
+                    prediction_obs_pred_arr = PredictionArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), id=opponent_pos_copy.obstacles[0].id, dt=self.dt, predictions=prediction_list)
                     self.prediction_obs_pred_pub.publish(prediction_obs_pred_arr)
 
                     self.opp_marker_pub.publish(opp_marker_array)
@@ -485,7 +485,7 @@ class OppTrajPredictor(PredictionNode):
                         prediction_obs_arr = ObstacleArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), obstacles=obstacle_list)
                         self.prediction_obs_pub.publish(prediction_obs_arr)
 
-                        prediction_obs_pred_arr = PredictionArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), id=opponent_pos_copy.obstacles[0].id, predictions=prediction_list)
+                        prediction_obs_pred_arr = PredictionArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id='map'), id=opponent_pos_copy.obstacles[0].id, dt=self.dt, predictions=prediction_list)
                         self.prediction_obs_pred_pub.publish(prediction_obs_pred_arr)
 
                         self.opp_marker_pub.publish(opp_marker_array)

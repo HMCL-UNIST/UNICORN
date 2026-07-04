@@ -69,6 +69,8 @@ class ObstacleSpliner(Node):
 
         self.gb_scaled_wpnts = None
         self.inflection_points = None
+        self.ot_wpnts = None
+        self.ot_wpnts_stamp = None
 
         # static params
         self.declare_parameters(
@@ -77,6 +79,8 @@ class ObstacleSpliner(Node):
                 ('from_bag', False),
                 ('measure', False),
                 ('n_loc_wpnts', 80),
+                ('blend_start_dist_m', 1.0),
+                ('blend_hold_max_sec', 0.5),
             ])
         self.from_bag = self.get_parameter(
             'from_bag').get_parameter_value().bool_value
@@ -84,6 +88,10 @@ class ObstacleSpliner(Node):
             'measure').get_parameter_value().bool_value
         self.n_loc_wpnts = self.get_parameter(
             'n_loc_wpnts').get_parameter_value().integer_value
+        self.blend_start_dist_m = self.get_parameter(
+            'blend_start_dist_m').get_parameter_value().double_value
+        self.blend_hold_max_sec = self.get_parameter(
+            'blend_hold_max_sec').get_parameter_value().double_value
 
         # dynamic (tunable) params - folded from dynamic_reconfigure cfg
         self.save_params = False
@@ -134,11 +142,19 @@ class ObstacleSpliner(Node):
             WpntArray, "/global_waypoints", self.gb_cb, QoSProfile(depth=10))
         self.create_subscription(
             WpntArray, "/global_waypoints_scaled", self.gb_scaled_cb, QoSProfile(depth=10))
+        # OT trajectory, used to seed the blended-recovery path (first ~1 m of OT).
+        self.create_subscription(
+            OTWpntArray, "/planner/avoidance/otwpnts", self.ot_wpnts_cb, QoSProfile(depth=10))
 
         self.mrks_pub = self.create_publisher(
             MarkerArray, "/planner/recovery/markers", QoSProfile(depth=10))
         self.recovery_wpnts_pub = self.create_publisher(
             WpntArray, "/planner/recovery/wpnts", QoSProfile(depth=10))
+        # OT-blended recovery: OT heading kept for the first ~1 m, then splined to GB.
+        self.ot_blended_wpnts_pub = self.create_publisher(
+            WpntArray, "/planner/ot_blended_recovery/wpnts", QoSProfile(depth=10))
+        self.ot_blended_mrks_pub = self.create_publisher(
+            MarkerArray, "/planner/ot_blended_recovery/markers", QoSProfile(depth=10))
         self.recovery_lookahead_pub = self.create_publisher(
             Marker, "/planner/recovery/lookahead_point", QoSProfile(depth=10))
         # Debug: per-sample spline bounds-check viz (green=pass, red=fail, blue=unchecked tail)
@@ -189,6 +205,50 @@ class ObstacleSpliner(Node):
         # transforms3d expects (w, x, y, z)
         euler = quat2euler([quat.w, quat.x, quat.y, quat.z])
         self.cur_yaw = euler[2]
+
+    def ot_wpnts_cb(self, data: OTWpntArray):
+        # Keep the last VALID OT trajectory. Empty publishes (planner produced nothing
+        # this frame) must not wipe it: the blended path keeps re-anchoring off this
+        # stored OT while the planner is silent, instead of collapsing to empty.
+        if len(data.wpnts) >= 2:
+            self.ot_wpnts = data
+            self.ot_wpnts_stamp = self.get_clock().now().nanoseconds * 1e-9
+
+    def _ot_blend_seed(self):
+        """Blend seed: the anchor pose ~blend_start_dist_m ahead of the car along the
+        current OT trajectory, PLUS the raw OT segment from the car's nearest point up
+        to the anchor. The head segment is prepended so the blended path starts under
+        the car (near_idx), not 1 m ahead at the anchor -- otherwise on_spline's
+        min_dist check rejects it. Returns (seed, head_xy) or None (-> empty blended)."""
+        ot = self.ot_wpnts
+        if ot is None or len(ot.wpnts) < 2:
+            return None
+        # Drop a too-old OT: re-anchoring off a stale trajectory would steer around
+        # obstacles that have since moved. Past the hold window, fall back to plain
+        # recovery (empty blended -> state machine uses recovery/GB).
+        if self.ot_wpnts_stamp is not None and (
+            self.get_clock().now().nanoseconds * 1e-9 - self.ot_wpnts_stamp
+        ) > self.blend_hold_max_sec:
+            return None
+        xy = np.array([(w.x_m, w.y_m) for w in ot.wpnts])
+        diff = np.linalg.norm(xy - np.array([self.cur_x, self.cur_y]), axis=1)
+        near = int(np.argmin(diff))
+        # Walk forward from the nearest OT point until blend_start_dist_m of arclength.
+        acc = 0.0
+        i = near
+        while i + 1 < len(ot.wpnts) and acc < self.blend_start_dist_m:
+            acc += float(np.linalg.norm(xy[i + 1] - xy[i]))
+            i += 1
+        # Car reached the end of the held OT path before a full 1 m of anchor lookahead
+        # remained: no usable anchor -> emit empty (state machine falls back).
+        if acc < self.blend_start_dist_m:
+            return None
+        w = ot.wpnts[i]
+        wp = ot.wpnts[i - 1] if i > 0 else ot.wpnts[i]
+        seed_yaw = float(np.arctan2(w.y_m - wp.y_m, w.x_m - wp.x_m))
+        seed = (float(w.x_m), float(w.y_m), seed_yaw, float(w.s_m), float(w.d_m))
+        head_xy = xy[near:i]  # OT points from under the car up to (not incl.) the anchor
+        return seed, head_xy
 
     # Callback for global waypoint topic
     def gb_cb(self, data: WpntArray):
@@ -294,6 +354,26 @@ class ObstacleSpliner(Node):
         self.recovery_wpnts_pub.publish(wpnts)
         self.mrks_pub.publish(mrks)
 
+        # OT-blended recovery: keep the first ~1 m of the OT path, then spline to GB.
+        # Published every loop; empty when no OT path exists so the state machine
+        # transparently falls back to the plain recovery path.
+        blended = WpntArray()
+        blended_mrks = MarkerArray()
+        seed_info = self._ot_blend_seed()
+        if seed_info is not None:
+            seed, head_xy = seed_info
+            blended, blended_mrks = self.do_spline(
+                gb_wpnts=gb_scaled_wpnts, seed=seed, head_xy=head_xy)
+        blended.header.stamp = self.get_clock().now().to_msg()
+        blended.header.frame_id = "map"
+        self.ot_blended_wpnts_pub.publish(blended)
+
+        blended_del = Marker()
+        blended_del.header.stamp = self.get_clock().now().to_msg()
+        blended_del.action = Marker.DELETEALL
+        blended_mrks.markers.insert(0, blended_del)
+        self.ot_blended_mrks_pub.publish(blended_mrks)
+
     #########
     # UTILS #
     #########
@@ -314,10 +394,12 @@ class ObstacleSpliner(Node):
 
         return converter
 
-    def find_tangent_idx(self, xy_m, psi_rads):
-        # Get current position
-        cur_x, cur_y = self.cur_x, self.cur_y
-        smooth = np.cos(self.cur_yaw), np.sin(self.cur_yaw) * self.smooth_len
+    def find_tangent_idx(self, xy_m, psi_rads, start_x=None, start_y=None, start_yaw=None):
+        # Start from the given seed pose (blended path) or the car pose (recovery).
+        cur_x = self.cur_x if start_x is None else start_x
+        cur_y = self.cur_y if start_y is None else start_y
+        cur_yaw = self.cur_yaw if start_yaw is None else start_yaw
+        smooth = np.cos(cur_yaw), np.sin(cur_yaw) * self.smooth_len
 
         # Compute direction vectors from the current position to waypoints
         dx = xy_m[:, 0] - (cur_x + smooth[0])
@@ -342,9 +424,15 @@ class ObstacleSpliner(Node):
 
         return tangent_idx
 
-    def do_spline(self, gb_wpnts: WpntArray) -> Tuple[WpntArray, MarkerArray]:
+    def do_spline(self, gb_wpnts: WpntArray, seed=None, head_xy=None) -> Tuple[WpntArray, MarkerArray]:
         """
         Creates an evasion trajectory for the closest obstacle by splining between pre- and post-apex points.
+
+        seed: optional (x, y, yaw, s, d) tuple to start the spline from instead of the
+        car pose. Used to build the "OT-blended recovery" path: the first ~1 m of the
+        OT trajectory is kept and the rest is splined back onto the GB line, so the
+        controller keeps the overtake heading while trailing instead of snapping to GB.
+        When None the path starts from the current car pose (plain recovery).
 
         This function takes as input the obstacles to be evaded, and a list of global waypoints that describe a reference raceline.
         It only considers obstacles that are within a threshold of the raceline and generates an evasion trajectory for each of these obstacles.
@@ -368,8 +456,15 @@ class ObstacleSpliner(Node):
         # Get spacing between wpnts for rough approximations
         wpnt_dist = gb_wpnts[1].s_m - gb_wpnts[0].s_m
 
-        cur_s = self.cur_s
-        cur_d = self.cur_d
+        # Spline seed: car pose (recovery) or OT-forward point (blended).
+        if seed is None:
+            seed_x, seed_y, seed_yaw, seed_s, seed_d = \
+                self.cur_x, self.cur_y, self.cur_yaw, self.cur_s, self.cur_d
+        else:
+            seed_x, seed_y, seed_yaw, seed_s, seed_d = seed
+
+        cur_s = seed_s
+        cur_d = seed_d
         cur_s_idx = int(cur_s / wpnt_dist)
 
         if len(self.inflection_points) != 0:
@@ -397,7 +492,8 @@ class ObstacleSpliner(Node):
             xy_m = np.array([(gb_wpnts[gb_idx].x_m, gb_wpnts[gb_idx].y_m) for gb_idx in gb_idxs])
             psi_rads = np.array([gb_wpnts[gb_idx].psi_rad for gb_idx in gb_idxs])
 
-            tangent_idx = self.find_tangent_idx(xy_m, psi_rads)
+            tangent_idx = self.find_tangent_idx(
+                xy_m, psi_rads, start_x=seed_x, start_y=seed_y, start_yaw=seed_yaw)
 
             if self.measuring:
                 mrk = Marker()
@@ -424,10 +520,10 @@ class ObstacleSpliner(Node):
         points = []
         tangents = []
 
-        points.append([self.cur_x, self.cur_y])
+        points.append([seed_x, seed_y])
         points.append([xy_m[tangent_idx, 0], xy_m[tangent_idx, 1]])
 
-        tangents.append(np.array([np.cos(self.cur_yaw), np.sin(self.cur_yaw)]))
+        tangents.append(np.array([np.cos(seed_yaw), np.sin(seed_yaw)]))
         tangents.append(np.array([np.cos(psi_rads[tangent_idx]), np.sin(psi_rads[tangent_idx])]))
 
         tangents = np.dot(tangents, self.spline_scale * np.eye(2))
@@ -470,7 +566,12 @@ class ObstacleSpliner(Node):
             for i in range(n_additional)
         ])
 
-        samples = np.vstack([samples, xy_additional])
+        # Prepend the raw OT head (car -> anchor) so the blended path starts under the
+        # car, then the anchor->GB spline, then the GB tail.
+        if head_xy is not None and len(head_xy) > 0:
+            samples = np.vstack([head_xy, samples, xy_additional])
+        else:
+            samples = np.vstack([samples, xy_additional])
 
         s_, d_ = self.converter.get_frenet(samples[:, 0], samples[:, 1])
 
@@ -500,7 +601,8 @@ class ObstacleSpliner(Node):
             wpnts.wpnts.append(
                 self.xyv_to_wpnts(x=samples[i, 0], y=samples[i, 1], s=s_[i], d=d_[i], v=vi, psi=psi_[i] + np.pi / 2, kappa=kappa_[i], wpnts=wpnts)
             )
-            mrks.markers.append(self.xyv_to_markers(x=samples[i, 0], y=samples[i, 1], v=vi, mrks=mrks))
+            mrk_rgb = (0.0, 0.0, 1.0) if seed is not None else None  # blue for OT-blended
+            mrks.markers.append(self.xyv_to_markers(x=samples[i, 0], y=samples[i, 1], v=vi, mrks=mrks, rgb=mrk_rgb))
 
         # Debug: visualize every spline sample colored by bounds check
         self._publish_spline_samples_markers(samples, bounds_check_results)
@@ -551,7 +653,7 @@ class ObstacleSpliner(Node):
     ######################
     # VIZ + MSG WRAPPING #
     ######################
-    def xyv_to_markers(self, x: float, y: float, v: float, mrks: MarkerArray) -> Marker:
+    def xyv_to_markers(self, x: float, y: float, v: float, mrks: MarkerArray, rgb=None) -> Marker:
         mrk = Marker()
         mrk.header.frame_id = "map"
         mrk.header.stamp = self.get_clock().now().to_msg()
@@ -560,10 +662,13 @@ class ObstacleSpliner(Node):
         mrk.scale.y = 0.1
         mrk.scale.z = float(v / self.gb_vmax)
         mrk.color.a = 1.0
-        mrk.color.b = 0.75
-        mrk.color.r = 0.75
-        if self.from_bag:
-            mrk.color.g = 0.75
+        if rgb is not None:
+            mrk.color.r, mrk.color.g, mrk.color.b = rgb
+        else:
+            mrk.color.b = 0.75
+            mrk.color.r = 0.75
+            if self.from_bag:
+                mrk.color.g = 0.75
 
         mrk.id = len(mrks.markers)
         mrk.pose.position.x = float(x)

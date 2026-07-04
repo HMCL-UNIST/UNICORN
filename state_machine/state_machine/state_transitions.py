@@ -135,14 +135,29 @@ def ObstacleTransition(state_machine: "StateMachine", close_to_raceline) -> Tupl
     if close_to_raceline and state_machine._check_free_frenet(state_machine.cur_gb_wpnts):
         return StateType.GB_TRACK, StateType.GB_TRACK
 
+    # Overtake takeover always wins: compute it once (it mutates static_overtaking_mode)
+    # and reuse below, so the recovery-hold branch can defer to it.
+    can_overtake = state_machine._check_overtaking_mode() or state_machine._check_static_overtaking_mode()
+
     if not close_to_raceline:
-        recovery_availability = state_machine._check_latest_wpnts(
+        recovery_fresh = state_machine._check_latest_wpnts(
             state_machine.recovery_wpnts, state_machine.cur_recovery_wpnts
         )
+        # Hold the RECOVERY src through brief recovery/blended dropouts: once we are
+        # already trailing on the recovery source, off the raceline and not about to
+        # overtake, keep it as long as the sliced cache is still valid -- avoids the
+        # 0.1 s latest_threshold flicker bouncing src to GB every time the planner
+        # skips a frame. Entry (first pick) still requires a fresh path.
+        recovery_hold = (
+            state_machine.local_wpnts_src == StateType.RECOVERY
+            and state_machine.cur_recovery_wpnts.is_init
+            and not can_overtake
+        )
+        recovery_availability = recovery_fresh or recovery_hold
         if recovery_availability and state_machine._check_free_frenet(state_machine.cur_recovery_wpnts):
             return StateType.RECOVERY, StateType.RECOVERY
 
-    if state_machine._check_overtaking_mode() or state_machine._check_static_overtaking_mode():
+    if can_overtake:
         return StateType.OVERTAKE, StateType.OVERTAKE
     else:
         if close_to_raceline:

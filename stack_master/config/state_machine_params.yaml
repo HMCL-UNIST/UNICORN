@@ -7,7 +7,7 @@ state_machine:
     sim: true
     measure: false
     racecar_version: "CAR"
-    ot_planner: "predictive_spliner"
+    ot_planner: "lane_change"
     track_length: 1.0
     # geometry / horizons
     gb_ego_width_m: 0.4
@@ -24,6 +24,7 @@ state_machine:
     splini_ttl: 2.0
     pred_splini_ttl: 2.0
     overtaking_ttl_sec: 3.0
+    overtake_min_closing_mps: 2.5
     ftg_speed_mps: 0.1
     ftg_timer_sec: 3.0
     ftg_active: false

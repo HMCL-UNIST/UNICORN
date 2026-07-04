@@ -36,6 +36,7 @@ class StateMachineParams:
         "gb_horizon_m",
         "interest_horizon_m",
         "overtaking_horizon_m",
+        "overtake_min_closing_mps",
     }
 
     def __init__(self, node: "StateMachine") -> None:
@@ -76,9 +77,9 @@ class StateMachineParams:
         self.racecar_version: str = node.get_parameter("racecar_version").value
 
         self._declare(
-            "ot_planner", "predictive_spliner",
+            "ot_planner", "lane_change",
             ParameterDescriptor(
-                description="Overtaking planner: spliner, predictive_spliner or graph_based",
+                description="Overtaking planner: lane_change, sqp, spliner or graph_based",
                 type=ParameterType.PARAMETER_STRING,
             ),
         )
@@ -131,6 +132,21 @@ class StateMachineParams:
 
         self._declare("emergency_break_horizon", 0.5)
         self.emergency_break_horizon: float = node.get_parameter("emergency_break_horizon").value
+
+        # Lower bound on the ego-vs-opponent closing speed used to turn gap into a
+        # time-to-pass (ttc) when slicing the opponent prediction in _check_free_frenet.
+        # While trailing, real relative speed ~0 makes ttc blow past the prediction
+        # horizon; this floor assumes "if we overtake, we close at least this fast" so
+        # the sliced prediction window lands within the predicted horizon. Tune per gap.
+        self._declare(
+            "overtake_min_closing_mps", 2.5,
+            ParameterDescriptor(
+                description="Min assumed closing speed (ego-opp) for ttc when checking OT free [m/s]",
+                type=ParameterType.PARAMETER_DOUBLE,
+                floating_point_range=[FloatingPointRange(from_value=0.5, to_value=5.0, step=0.1)],
+            ),
+        )
+        self.overtake_min_closing_mps: float = node.get_parameter("overtake_min_closing_mps").value
 
         # ------------------------------------------------------------------ #
         # DYNAMIC PARAMETERS (replaces dyn_statemachine_tuner.cfg)
