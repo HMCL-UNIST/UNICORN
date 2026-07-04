@@ -605,41 +605,36 @@ class SQPAvoidanceNode(Node):
         return initial_guess_object
 
     def _more_space(self, obstacle: Obstacle, gb_wpnts, gb_idxs):
-        left_boundary_mean = np.mean([gb_wpnts[gb_idx].d_left for gb_idx in gb_idxs])
-        right_boundary_mean = np.mean([gb_wpnts[gb_idx].d_right for gb_idx in gb_idxs])
-        left_gap = abs(left_boundary_mean - obstacle.d_left)
-        right_gap = abs(right_boundary_mean + obstacle.d_right)
+        # d-sign matches bounds at ~line 378: +d = left wall (+d_left), -d = right wall (-d_right).
+        # Nearest single waypoint, not the ROC mean (mean across a corner flips the side).
+        near_idx = gb_idxs[len(gb_idxs) // 2]
+        wall_left = gb_wpnts[near_idx].d_left
+        wall_right = gb_wpnts[near_idx].d_right
+
+        # Signed free room: <=0 when the obstacle already fills that side.
+        left_gap = wall_left - obstacle.d_left
+        right_gap = obstacle.d_right + wall_right
         min_space = self.evasion_dist + self.spline_bound_mindist
 
-        if right_gap > min_space and left_gap < min_space:
-            # Compute apex distance to the right of the opponent
-            d_apex_right = obstacle.d_right - self.evasion_dist
-            # If we overtake to the right of the opponent BUT the apex is to the left of the raceline, then we set the apex to 0
-            if d_apex_right > 0:
-                d_apex_right = 0
-            return "right", d_apex_right
-
-        elif left_gap > min_space and right_gap < min_space:
-            # Compute apex distance to the left of the opponent
-            d_apex_left = obstacle.d_left + self.evasion_dist
-            # If we overtake to the left of the opponent BUT the apex is to the right of the raceline, then we set the apex to 0
-            if d_apex_left < 0:
-                d_apex_left = 0
-            return "left", d_apex_left
+        left_ok = left_gap >= min_space
+        right_ok = right_gap >= min_space
+        if left_ok and not right_ok:
+            side = "left"
+        elif right_ok and not left_ok:
+            side = "right"
         else:
-            candidate_d_apex_left = obstacle.d_left + self.evasion_dist
-            candidate_d_apex_right = obstacle.d_right - self.evasion_dist
+            side = "left" if left_gap >= right_gap else "right"
 
-            if abs(candidate_d_apex_left) <= abs(candidate_d_apex_right):
-                # If we overtake to the left of the opponent BUT the apex is to the right of the raceline, then we set the apex to 0
-                if candidate_d_apex_left < 0:
-                    candidate_d_apex_left = 0
-                return "left", candidate_d_apex_left
-            else:
-                # If we overtake to the right of the opponent BUT the apex is to the left of the raceline, then we set the apex to 0
-                if candidate_d_apex_right > 0:
-                    candidate_d_apex_right = 0
-                return "right", candidate_d_apex_right
+        if side == "left":
+            d_apex = obstacle.d_left + self.evasion_dist
+            d_apex = max(d_apex, 0.0)
+            d_apex = min(d_apex, wall_left - self.spline_bound_mindist)
+            return "left", d_apex
+        else:
+            d_apex = obstacle.d_right - self.evasion_dist
+            d_apex = min(d_apex, 0.0)
+            d_apex = max(d_apex, -wall_right + self.spline_bound_mindist)
+            return "right", d_apex
 
     ### Visualize SQP Rviz###
     def visualize_sqp(self, evasion_s, evasion_d, evasion_x, evasion_y, evasion_v):
