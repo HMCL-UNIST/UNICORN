@@ -66,6 +66,7 @@ class GlobalPlanner(Node):
         self.declare_parameter('map_dir', '')
         self.declare_parameter('reverse_mapping', False)
         self.declare_parameter('required_laps', 1)
+        self.declare_parameter('enable_mintime', False)
 
         self.racecar_version = self.get_parameter('racecar_version').value  # NUCX
 
@@ -77,6 +78,7 @@ class GlobalPlanner(Node):
 
         self.safety_width = self.get_parameter('safety_width').value
         self.safety_width_sp = self.get_parameter('safety_width_sp').value
+        self.enable_mintime = self.get_parameter('enable_mintime').value
         self.occupancy_grid_threshold = self.get_parameter('occupancy_grid_threshold').value
 
         self.show_plots = self.get_parameter('show_plots').value  # show no plots if False
@@ -586,10 +588,11 @@ class GlobalPlanner(Node):
         # publish the centerline markers
         self.vis_wpnt_cent_pub.publish(centerline_markers)
 
-        self.get_logger().info('[GB Planner]: Start Global Trajectory optimization with iterative minimum curvature...')
+        main_opt_type = 'mintime' if self.enable_mintime else 'mincurv_iqp'
+        self.get_logger().info(f'[GB Planner]: Start Global Trajectory optimization ({main_opt_type})...')
         global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(input_path=self.input_path,
                                                                                           track_name='map_centerline',
-                                                                                          curv_opt_type='mincurv_iqp',
+                                                                                          curv_opt_type=main_opt_type,
                                                                                           safety_width=self.safety_width,
                                                                                           plot=(self.show_plots and not self.map_editor))
 

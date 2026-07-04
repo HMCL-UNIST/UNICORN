@@ -314,6 +314,9 @@ def trajectory_optimizer(input_path: str,
         print(alpha_opt.shape)
 
     elif curv_opt_type == 'mintime':
+        # override ini width_opt with the yaml-driven safety_width, mirroring the
+        # mincurv/shortest_path w_veh handling (in-memory only, ini file untouched)
+        pars_tmp["optim_opts"]["width_opt"] = safety_width
         # reftrack_interp, a_interp and normvec_normalized_interp are returned for the case that non-regular sampling
         # was applied
         alpha_opt, v_opt, reftrack_interp, a_interp_tmp, normvec_normalized_interp = opt_mintime_traj.src.opt_mintime.\

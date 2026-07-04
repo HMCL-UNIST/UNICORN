@@ -19,6 +19,7 @@
        description="ROS params YAML for the global planner node"/>
   <arg name="reverse"            default="false"   description="Reverse raceline direction"/>
   <arg name="show_plots"         default="false"   description="Show optimization result plots"/>
+  <arg name="enable_mintime"     default="false"   description="Use mintime (time-optimal) instead of mincurv_iqp for the main raceline"/>
 
   <!-- sim -> SIM config folder, real hardware -> CAR config folder. The folder
        name doubles as racecar_version (holds racecar_f110.ini + veh_dyn_info/). -->
@@ -38,6 +39,7 @@
     <param name="map_dir"            value="$(var maps_dir)/$(var map)/"/>
     <param name="reverse_mapping"    value="$(var reverse)"/>
     <param name="show_plots"         value="$(var show_plots)"/>
+    <param name="enable_mintime"     value="$(var enable_mintime)"/>
   </node>
 
   <!-- ===== map source: serve the already-saved map so the planner can read it ===== -->
