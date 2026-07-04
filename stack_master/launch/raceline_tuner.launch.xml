@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<!--
+  raceline_tuner.launch.xml — interactively tune an EXISTING raceline.
+
+  Loads stack_master/maps/<map>/global_waypoints.json into the interactive
+  trajectory tuner, serves the saved map for the RViz background, and keeps the
+  speed / overtaking sector slicers running so that hitting "Save" in the tuner
+  re-publishes /global_waypoints (+ /trackbounds/markers) and the slicers
+  re-slice speed_scaling.yaml / ot_sectors.yaml into the map folder.
+
+  Run this INSTEAD of race.launch.xml / base_system.launch.xml, never alongside
+  them: the tuner publishes /global_waypoints, which those stacks also drive, so
+  running both fights over the same topic and corrupts the pipeline.
+
+    ros2 launch stack_master raceline_tuner.launch.xml map:=f
+-->
+<launch>
+  <arg name="map"                                  description="Map name (folder in stack_master/maps/)"/>
+  <arg name="rviz"               default="true"    description="Launch RViz with the tuner markers + map"/>
+  <arg name="rviz_config"        default="$(find-pkg-share stack_master)/config/raceline_tuner.rviz"
+       description="RViz config to load"/>
+
+  <let name="maps_dir" value="$(find-pkg-share stack_master)/maps"/>
+
+  <!-- ===== interactive trajectory tuner: reads global_waypoints.json, publishes
+       /global_waypoints, /global_waypoints/markers, /trackbounds/markers ===== -->
+  <node pkg="gb_optimizer" exec="global_trajectory_tuner" name="global_traj_tuner_node" output="screen" emulate_tty="true">
+    <param name="map"     value="$(var map)"/>
+    <param name="map_dir" value="$(var maps_dir)/$(var map)/"/>
+  </node>
+
+  <!-- ===== map source: serve the saved map for the RViz background ===== -->
+  <node pkg="nav2_map_server" exec="map_server" name="map_server" output="screen">
+    <param name="yaml_filename" value="$(var maps_dir)/$(var map)/$(var map).yaml"/>
+  </node>
+  <node pkg="nav2_lifecycle_manager" exec="lifecycle_manager" name="lifecycle_manager" output="screen">
+    <param name="autostart"  value="true"/>
+    <param name="node_names" value="[map_server]"/>
+  </node>
+
+  <!-- ===== sector slicing: subscribe to the tuner's /global_waypoints +
+       /trackbounds/markers and write the sector yamls on Save ===== -->
+  <node pkg="sector_tuner" exec="sector_slicer" name="sector_node" output="screen">
+    <param name="save_dir" value="$(var maps_dir)/$(var map)"/>
+  </node>
+  <node pkg="overtaking_sector_tuner" exec="ot_sector_slicer" name="ot_sector_node" output="screen">
+    <param name="save_dir" value="$(var maps_dir)/$(var map)"/>
+  </node>
+
+  <!-- ===== RViz ===== -->
+  <node pkg="rviz2" exec="rviz2" name="rviz2" args="-d $(var rviz_config)" if="$(var rviz)"/>
+</launch>
