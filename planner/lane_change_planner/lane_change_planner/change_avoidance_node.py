@@ -393,8 +393,8 @@ class ChangeAvoidanceNode(Node):
         return considered_obs
 
     def more_space(self, obstacle: Obstacle, gb_wpnts, gb_idxs):
-        left_gap = abs(gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left)
-        right_gap = abs(gb_wpnts[gb_idxs[0]].d_right + obstacle.d_right)
+        left_gap = gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left
+        right_gap = gb_wpnts[gb_idxs[0]].d_right + obstacle.d_right
         min_space = self.spline_bound_mindist + self.width_car / 2 + self.safety_margin
 
         if right_gap > min_space and left_gap < min_space:
