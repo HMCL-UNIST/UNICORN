@@ -83,7 +83,7 @@ class ChangeAvoidanceNode(Node):
         # Solver params
         self.width_car = 0.30
         self.safety_margin = 0.1
-        self.back_to_raceline_before = 5
+        self.back_to_raceline_before = 3.0
         self.back_to_raceline_after = 3
         self.obs_traj_tresh = 2
 

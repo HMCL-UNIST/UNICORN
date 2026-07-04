@@ -12,7 +12,7 @@ controller_manager:
     end_scale_speed: 10.0
     downscale_factor: 0.5
     speed_lookahead_for_steer: 0.0
-    trailing_gap: 2.0
+    trailing_gap: 2.5
     trailing_vel_gain: 0.25
     trailing_p_gain: 1.35
     trailing_i_gain: 0.0
