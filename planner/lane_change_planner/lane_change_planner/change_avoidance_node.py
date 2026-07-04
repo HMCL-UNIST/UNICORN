@@ -77,7 +77,7 @@ class ChangeAvoidanceNode(Node):
         self.width_car = 0.30
         self.safety_margin = 0.1
         self.back_to_raceline_before = 5
-        self.back_to_raceline_after = 5
+        self.back_to_raceline_after = 3
         self.obs_traj_tresh = 2
 
         # Dynamic sovler params
@@ -94,7 +94,7 @@ class ChangeAvoidanceNode(Node):
 
         # Symmetric lane perturbation (centerline +/- lane_offset -> outer/inner lanes).
         # Adjustable live via rqt: changing it regenerates the two lanes.
-        self.lane_offset = 0.25
+        self.lane_offset = 0.4
 
         # Require fresh GP prediction before overtaking. Without it we only trail.
         # Prediction is considered stale if the latest prediction msg is older than this.
@@ -608,16 +608,19 @@ class ChangeAvoidanceNode(Node):
         # Target lane d along s (full avoidance offset); raceline d = 0.
         lane_d = self._lane_d_at_s(target_wpnts, s_lin)
 
-        # Cosine ease: 0 (raceline) before the obstacle, ramp to lane_d across the obstacle, ramp back.
-        ramp = self.back_to_raceline_before
+        # Cosine ease: 0 (raceline) before the obstacle, ramp to lane_d across the obstacle, ramp
+        # back. Entry ramp width = back_to_raceline_before, exit ramp width = back_to_raceline_after
+        # (separate, so the approach and the return to the raceline can be tuned independently).
+        ramp_in = self.back_to_raceline_before
+        ramp_out = self.back_to_raceline_after
         d_arr = np.zeros_like(s_lin)
         for i, s in enumerate(s_lin):
-            if s < obs_start_u - ramp or s > obs_end_u + ramp:
+            if s < obs_start_u - ramp_in or s > obs_end_u + ramp_out:
                 w = 0.0
             elif s < obs_start_u:
-                w = 0.5 * (1 - np.cos(np.pi * (s - (obs_start_u - ramp)) / ramp))
+                w = 0.5 * (1 - np.cos(np.pi * (s - (obs_start_u - ramp_in)) / ramp_in))
             elif s > obs_end_u:
-                w = 0.5 * (1 + np.cos(np.pi * (s - obs_end_u) / ramp))
+                w = 0.5 * (1 + np.cos(np.pi * (s - obs_end_u) / ramp_out))
             else:
                 w = 1.0
             d_arr[i] = w * lane_d[i]
