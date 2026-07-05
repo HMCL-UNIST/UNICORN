@@ -79,8 +79,10 @@ VescDriver::VescDriver(const rclcpp::NodeOptions & options)
 
   // create vesc state (telemetry) publisher
   state_pub_ = create_publisher<VescStateStamped>("sensors/core", rclcpp::QoS{10});
-  imu_pub_ = create_publisher<VescImuStamped>("sensors/imu", rclcpp::QoS{10});
-  imu_std_pub_ = create_publisher<Imu>("sensors/imu/raw", rclcpp::QoS{10});
+  // custom VESC-native IMU (ypr deg, accel g, gyro deg/s) on a non-overlapping name;
+  // the ROS-standard sensor_msgs/Imu takes the clean "sensors/imu" name.
+  imu_pub_ = create_publisher<VescImuStamped>("sensors/imu_vesc", rclcpp::QoS{10});
+  imu_std_pub_ = create_publisher<Imu>("sensors/imu", rclcpp::QoS{10});
 
   // since vesc state does not include the servo position, publish the commanded
   // servo position as a "sensor"
@@ -103,8 +105,10 @@ VescDriver::VescDriver(const rclcpp::NodeOptions & options)
   servo_sub_ = create_subscription<Float64>(
     "commands/servo/position", rclcpp::QoS{10}, std::bind(&VescDriver::servoCallback, this, _1));
 
-  // create a 50Hz timer, used for state machine & polling VESC telemetry
+  // 50 Hz timer for the state machine + VESC state (odometry) polling
   timer_ = create_wall_timer(20ms, std::bind(&VescDriver::timerCallback, this));
+  // dedicated 100 Hz timer for VESC IMU polling, decoupled from state polling
+  timer_imu_ = create_wall_timer(10ms, std::bind(&VescDriver::timerImuCallback, this));
 }
 
 /* TODO or TO-THINKABOUT LIST
@@ -144,13 +148,27 @@ void VescDriver::timerCallback()
       driver_mode_ = MODE_OPERATING;
     }
   } else if (driver_mode_ == MODE_OPERATING) {
-    // poll for vesc state (telemetry)
+    // poll for vesc state (telemetry). IMU is polled separately in timerImuCallback().
     vesc_.requestState();
-    // poll for vesc imu
-    vesc_.requestImuData();
   } else {
     // unknown mode, how did that happen?
     assert(false && "unknown driver mode");
+  }
+}
+
+void VescDriver::timerImuCallback()
+{
+  // VESC interface should not unexpectedly disconnect, but test for it anyway
+  if (!vesc_.isConnected()) {
+    RCLCPP_FATAL(get_logger(), "Unexpectedly disconnected from serial port.");
+    rclcpp::shutdown();
+    return;
+  }
+
+  // only poll the IMU once the driver has finished initialising; the FW-version
+  // handshake that flips the mode to OPERATING is driven by timerCallback().
+  if (driver_mode_ == MODE_OPERATING) {
+    vesc_.requestImuData();
   }
 }
 

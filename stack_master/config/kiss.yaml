@@ -19,7 +19,7 @@ kiss_icp_localization:
     scan_topic: "/scan"              # urg_node LaserScan (frame_id: laser)
     # ---- prediction: translation from wheel odom, rotation from gyro ----
     odom_twist_topic: "/vesc/odom"   # twist.vx drives translation prediction
-    imu_topic: "/vesc/sensors/imu/raw"
+    imu_topic: "/vesc/sensors/imu"
     imu_en: true
     deskew_en: true                  # gyro deskew (uses LaserScan time_increment)
     imu_rate_odom: true              # high-rate pose between scans (gyro rot + odom vx)

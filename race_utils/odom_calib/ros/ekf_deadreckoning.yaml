@@ -36,7 +36,7 @@ ekf_deadreckoning:
     # This is the whole point: orientation yaw is drift-free (AHRS), vyaw is the gyro.
     # The base_link->vesc_imu static TF (yaw +90°, see low_level.launch.xml) must be
     # alive so RL can rotate the IMU into base_link.
-    imu0: /vesc/sensors/imu/raw
+    imu0: /vesc/sensors/imu
     imu0_config: [false, false, false,
                   false, false, true,     # yaw (orientation)
                   false, false, false,

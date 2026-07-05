@@ -84,7 +84,7 @@ a Savitzky-Golay differentiation of `/tracked_pose`).
 ## Validate through the real `robot_localization` (done — it agrees)
 The shipped `stack_master/config/ekf_cartographer.yaml` fuses `/vesc/odom` twist +
 cartographer pose, and **does not use the IMU**. `ros/ekf_deadreckoning.yaml` fuses
-`/vesc/odom` (vx) + `/vesc/sensors/imu/raw` (AHRS yaw + gyro) with **no** map pose,
+`/vesc/odom` (vx) + `/vesc/sensors/imu` (AHRS yaw + gyro) with **no** map pose,
 so its `/odometry/filtered` is an honest dead-reckoning estimate.
 
 Replayed both bags through the actual `ekf_node` (`ros/replay_verify.sh` +

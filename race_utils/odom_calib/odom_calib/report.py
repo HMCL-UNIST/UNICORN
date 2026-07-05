@@ -123,7 +123,7 @@ def build_report(bag, dur, sc, stc, dist, metrics, old, wheelbase):
           "to drift; the **AHRS absolute heading is drift-free**, so it is the safer choice on "
           "long runs, and the complementary filter (`ahrs_gyro`) keeps the gyro's smoothness "
           "while pinning it to the AHRS — the best general-purpose option.")
-        A("4. This is exactly what feeding `/vesc/sensors/imu/raw` (orientation + gyro) into "
+        A("4. This is exactly what feeding `/vesc/sensors/imu` (orientation + gyro) into "
           "`robot_localization` buys you. The shipped `ekf_cartographer.yaml` does **not** fuse "
           "the IMU at all — see `ros/ekf_deadreckoning.yaml` for a config that does, plus how to "
           "replay this bag through the real package.")

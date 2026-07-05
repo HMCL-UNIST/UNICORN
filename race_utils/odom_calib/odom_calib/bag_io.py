@@ -25,7 +25,7 @@ VESC_ODOM_TOPIC = "/vesc/odom"             # wheel dead-reckoning (free-running)
 CAR_STATE_TOPIC = "/car_state/odom"        # EKF output (carto-locked, reference)
 CORE_TOPIC = "/vesc/sensors/core"          # eRPM, motor current, ...
 SERVO_TOPIC = "/vesc/sensors/servo_position_command"
-IMU_TOPIC = "/vesc/sensors/imu"            # AHRS: ypr (deg), gyro, accel
+IMU_TOPIC = "/vesc/sensors/imu_vesc"       # VESC-native AHRS: ypr (deg), gyro, accel
 CMD_SPEED_TOPIC = "/vesc/commands/motor/speed"
 CMD_SERVO_TOPIC = "/vesc/commands/servo/position"
 ACKERMANN_TOPIC = "/vesc/ackermann_cmd"   # drive.speed [m/s], drive.steering_angle [rad]
@@ -122,7 +122,7 @@ def read_bag(path: str, t_start: float | None = None, t_end: float | None = None
         elif topic == IMU_TOPIC:
             im = msg.imu
             # VescImu reports ypr in DEGREES and angular_velocity in DEG/S
-            # (the sibling /vesc/sensors/imu/raw carries the same data in rad & rad/s).
+            # (the sibling /vesc/sensors/imu carries the same data in rad & rad/s).
             push(topic, "yaw", math.radians(im.ypr.z))        # AHRS heading -> rad
             push(topic, "gyro_z", math.radians(im.angular_velocity.z))  # -> rad/s
             push(topic, "acc_x", im.linear_acceleration.x)

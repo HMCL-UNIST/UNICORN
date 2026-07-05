@@ -104,6 +104,7 @@ private:
   rclcpp::SubscriptionBase::SharedPtr position_sub_;
   rclcpp::SubscriptionBase::SharedPtr servo_sub_;
   rclcpp::TimerBase::SharedPtr timer_;
+  rclcpp::TimerBase::SharedPtr timer_imu_;
 
   // driver modes (possible states)
   typedef enum
@@ -126,6 +127,7 @@ private:
   void servoCallback(const Float64::SharedPtr servo);
   void speedCallback(const Float64::SharedPtr speed);
   void timerCallback();
+  void timerImuCallback();
 };
 
 }  // namespace vesc_driver
