@@ -106,6 +106,10 @@ ros2kill() {
 # this launch later. Pass-through args go to ros2 launch.
 alias pitwall='ros2 launch pitwall pitwall.launch.py'
 
+# Live cartographer matching-health monitor (frozen-map constraints, match
+# scores, matcher/backend queues). Needs cartographer_node -collect_metrics.
+alias cartometrics='python3 "$_URS_REPO/stack_master/scripts/carto_metrics.py" --watch 2'
+
 # colcon build (Release) + re-source. No args = whole workspace; args = packages.
 cbuild() {
     local sel=()
@@ -116,4 +120,4 @@ cbuild() {
         && bash "$_URS_REPO/.install_utils/macos_link_rosidl_typesupports.sh" "$_URS_WS"
 }
 
-echo "[unicorn] env ready  |  RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID  |  helpers: cbuild, ros2kill"
+echo "[unicorn] env ready  |  RMW=$RMW_IMPLEMENTATION  ROS_DOMAIN_ID=$ROS_DOMAIN_ID  |  helpers: cbuild, ros2kill, cartometrics"

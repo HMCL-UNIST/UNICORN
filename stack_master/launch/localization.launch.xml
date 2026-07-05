@@ -56,7 +56,7 @@
     <let name="lua_file" value="localization_2d.lua"/>
 
     <node pkg="cartographer_ros" exec="cartographer_node" name="cartographer_node" output="screen"
-          args="-configuration_directory $(var cartographer_config_dir) -configuration_basename $(var lua_file) -load_state_filename $(var pbstream_file)">
+          args="-configuration_directory $(var cartographer_config_dir) -configuration_basename $(var lua_file) -load_state_filename $(var pbstream_file) -collect_metrics">
       <param name="use_sim_time" value="false"/>
       <remap from="/imu" to="/vesc/sensors/imu"/>
       <remap from="/odom" to="/vesc/odom"/>
