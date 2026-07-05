@@ -311,35 +311,37 @@ class ObstacleSpliner(Node):
         return converter
 
     def _more_space(self, obstacle: Obstacle, gb_wpnts: List[Any], obs_s_idx: int) -> Tuple[str, float]:
-        # Evade toward the side with more empty space. d-sign: +d toward gb_wp.d_right wall,
-        # -d toward gb_wp.d_left wall; obstacle edges = d_center +/- size/2. gap and apex use the
-        # same convention so the apex never lands on the narrow side.
+        # Evade toward the side with more empty space. f1tenth frenet: +d is LEFT, -d is RIGHT.
+        # gb_wp.d_left / gb_wp.d_right are POSITIVE wall distances (widths), so the left wall
+        # sits at signed +d_left and the right wall at signed -d_right. Obstacle edges =
+        # d_center +/- size/2. gap and apex use this convention so the apex never lands on the
+        # narrow side.
         gb_wp = gb_wpnts[obs_s_idx]
         obs_radius = obstacle.size / 2
 
-        pos_gap = gb_wp.d_right - (obstacle.d_center + obs_radius)  # free room toward +d wall
-        neg_gap = gb_wp.d_left + (obstacle.d_center - obs_radius)   # free room toward -d wall
+        pos_gap = gb_wp.d_left - (obstacle.d_center + obs_radius)   # free room toward +d (left) wall
+        neg_gap = (obstacle.d_center - obs_radius) + gb_wp.d_right  # free room toward -d (right) wall
         min_space = self.evasion_dist + self.spline_bound_mindist
 
         pos_ok = pos_gap >= min_space
         neg_ok = neg_gap >= min_space
         if pos_ok and not neg_ok:
-            side = "right"          # +d
+            side = "left"           # +d
         elif neg_ok and not pos_ok:
-            side = "left"           # -d
+            side = "right"          # -d
         else:
-            side = "right" if pos_gap >= neg_gap else "left"
+            side = "left" if pos_gap >= neg_gap else "right"
 
-        if side == "right":
+        if side == "left":
             d_apex = (obstacle.d_center + obs_radius) + self.evasion_dist
             if d_apex < 0:
                 d_apex = 0.0        # never flip across the raceline to the wrong side
-            d_apex = min(d_apex, gb_wp.d_right)   # clamp to +d wall
+            d_apex = min(d_apex, gb_wp.d_left)   # clamp to +d wall (signed +d_left)
         else:
             d_apex = (obstacle.d_center - obs_radius) - self.evasion_dist
             if d_apex > 0:
                 d_apex = 0.0
-            d_apex = max(d_apex, -gb_wp.d_left)   # clamp to -d wall
+            d_apex = max(d_apex, -gb_wp.d_right)  # clamp to -d wall (signed -d_right)
 
         return side, d_apex
 
