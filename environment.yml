@@ -77,6 +77,11 @@ dependencies:
   - ros-jazzy-nav2-msgs=1.3.11
   - ros-jazzy-robot-localization=3.8.3
   - ros-jazzy-rosbag2-storage-mcap=0.26.9
+  # rqt itself + common plugins come with ros-jazzy-desktop, but rqt_tf_tree is a
+  # separate package the desktop meta does NOT pull. After a fresh install rqt's
+  # plugin cache may not see it — run once with:
+  #   ros2 run rqt_tf_tree rqt_tf_tree --force-discover
+  - ros-jazzy-rqt-tf-tree=1.0.5
   - ros-jazzy-teleop-twist-keyboard=2.4.1
   - ros-jazzy-tf-transformations=1.1.0
   - ros-jazzy-xacro=2.1.1
