@@ -87,8 +87,8 @@ class ChangeAvoidanceNode(Node):
         self.width_car = 0.30
         self.safety_margin = 0.1
         self.back_to_raceline_before = 3.0
-        self.back_to_raceline_after = 3
-        self.obs_traj_tresh = 2
+        self.back_to_raceline_after = 3.0
+        self.obs_traj_tresh = 2.0
 
         # Dynamic sovler params
         self.down_sampled_delta_s = 0.1
@@ -108,7 +108,7 @@ class ChangeAvoidanceNode(Node):
 
         # Symmetric lane perturbation (centerline +/- lane_offset -> outer/inner lanes).
         # Adjustable live via rqt: changing it regenerates the two lanes.
-        self.lane_offset = 0.4
+        self.lane_offset = 0.35
 
         # Require fresh GP prediction before overtaking. Without it we only trail.
         # Prediction is considered stale if the latest prediction msg is older than this.
