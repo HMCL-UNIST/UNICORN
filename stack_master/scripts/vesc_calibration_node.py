@@ -92,7 +92,7 @@ class VescCalibrationNode(Node):
         gp('cmd_topic', '/vesc/high_level/ackermann_cmd')  # mux autodrive input
         gp('odom_topic', '/car_state/odom')                # ground-truth (ESTIMATED) speed/yaw
         gp('expected_odom_topic', '/vesc/odom')            # vesc dead-reckoning (EXPECTED path)
-        gp('imu_topic', '/vesc/sensors/imu/raw')
+        gp('imu_topic', '/vesc/sensors/imu')   # standard sensor_msgs/Imu (renamed from imu/raw)
         gp('wheelbase', 0.33)
         gp('source_node', '/vesc/ackermann_to_vesc_node')  # read current gains here
         # BOTH vesc nodes share the same gains (vehicle_config.yaml `vesc/**`
