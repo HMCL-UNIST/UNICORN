@@ -13,21 +13,6 @@
 -- limitations under the License.
 
 -- /* Author: Darby Lim */
--- Copyright 2016 The Cartographer Authors
---
--- Licensed under the Apache License, Version 2.0 (the "License");
--- you may not use this file except in compliance with the License.
--- You may obtain a copy of the License at
---
---      http://www.apache.org/licenses/LICENSE-2.0
---
--- Unless required by applicable law or agreed to in writing, software
--- distributed under the License is distributed on an "AS IS" BASIS,
--- WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
--- See the License for the specific language governing permissions and
--- limitations under the License.
-
--- /* Author: Darby Lim */
 
 include "map_builder.lua"
 include "trajectory_builder.lua"
@@ -37,14 +22,20 @@ options = {
   trajectory_builder = TRAJECTORY_BUILDER,
   map_frame = "map",
   tracking_frame = "vesc_imu_rot", --set as imu_frame
-  published_frame = "base_link",
-  odom_frame = "odom",
+  use_odometry = false,
 
+  -- ===== TF publishing =====
+  -- Consumed by node.cpp PublishLocalTrajectoryData. With publish_to_tf = false
+  -- no TF is broadcast (the EKF owns map->base_link), but published_frame is NOT
+  -- fully inert: the whole publish block (including /tracked_pose) is gated on
+  -- the published_frame->tracking_frame TF lookup succeeding.
   publish_to_tf = false, -- default:true
+  published_frame = "base_link", -- TF child: map->published_frame (or odom->published_frame)
+  odom_frame = "odom",           -- only used when provide_odom_frame = true
+  provide_odom_frame = true,     -- true: split TF into map->odom + odom->published_frame
+
   publish_tracked_pose = true, -- default:false
   use_pose_extrapolator = true, -- default:true
-
-  provide_odom_frame = true,
   publish_frame_projected_to_2d = true,
 
   num_laser_scans = 1,
@@ -56,7 +47,6 @@ options = {
   pose_publish_period_sec = 5e-3,
   trajectory_publish_period_sec = 1e-1,
 
-  use_odometry = false,
   use_nav_sat = false,
   use_landmarks = false,
   rangefinder_sampling_ratio = 1.,
@@ -65,11 +55,12 @@ options = {
   imu_sampling_ratio = 1.0,
   landmarks_sampling_ratio = 1.,
 }
+
 MAP_BUILDER.use_trajectory_builder_2d = true
 MAP_BUILDER.num_background_threads = 4
 
 TRAJECTORY_BUILDER_2D.min_range = 0.12
-TRAJECTORY_BUILDER_2D.max_range = 30.
+TRAJECTORY_BUILDER_2D.max_range = 50.
 TRAJECTORY_BUILDER_2D.missing_data_ray_length = 5.
 
 TRAJECTORY_BUILDER_2D.num_accumulated_range_data = 10
@@ -88,56 +79,26 @@ TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.1)
 POSE_GRAPH.constraint_builder.min_score = 0.6
 POSE_GRAPH.constraint_builder.global_localization_min_score = 0.8
 
-POSE_GRAPH.optimize_every_n_nodes = 100
+-- Inter-trajectory matching policy (only relevant in localization against the
+-- frozen map; no effect while mapping, which has a single trajectory):
+--  * global_sampling_ratio = 0 disables initial-guess-free GLOBAL (full-submap)
+--    search entirely — on a self-similar track it can teleport the pose.
+--  * global_constraint_search_after_n_seconds is the grace period after the
+--    last inter-trajectory constraint during which the initial-guess-based
+--    LOCAL search keeps being used. Large value = that path never closes, so
+--    localization can re-attach after short matching gaps.
+POSE_GRAPH.constraint_builder.sampling_ratio = 0.3
+POSE_GRAPH.global_sampling_ratio = 0.0
+POSE_GRAPH.global_constraint_search_after_n_seconds = 1000.
+
+-- Keep wheel odometry OUT of the pose-graph optimization (wheel slip makes it
+-- unreliable as a graph constraint). When use_odometry = true, odometry still
+-- feeds the pose extrapolator (velocity for the scan-match initial guess);
+-- these weights only remove the node-to-node odometry residual in the backend.
+POSE_GRAPH.optimization_problem.odometry_translation_weight = 0
+POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0
+POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.linear_search_window = 1.5  -- default: 7
+POSE_GRAPH.constraint_builder.fast_correlative_scan_matcher.angular_search_window = math.rad(30.)
+POSE_GRAPH.optimize_every_n_nodes = 100 
 
 return options
-
--- include "map_builder.lua"
--- include "trajectory_builder.lua"
--- 
--- options = {
-  -- map_builder = MAP_BUILDER,
-  -- trajectory_builder = TRAJECTORY_BUILDER,
-  -- map_frame = "map",
-  -- tracking_frame = "vesc_imu",
-  -- published_frame = "odom",
-  -- odom_frame = "odom",
-  -- provide_odom_frame = false,
-  -- publish_frame_projected_to_2d = true,
-  -- use_odometry = false,
-  -- use_nav_sat = false,
-  -- use_landmarks = false,
-  -- num_laser_scans = 1,
-  -- num_multi_echo_laser_scans = 0,
-  -- num_subdivisions_per_laser_scan = 1,
-  -- num_point_clouds = 0,
-  -- lookup_transform_timeout_sec = 0.2,
-  -- submap_publish_period_sec = 0.3,
-  -- pose_publish_period_sec = 5e-3,
-  -- trajectory_publish_period_sec = 30e-3,
-  -- rangefinder_sampling_ratio = 1.,
-  -- odometry_sampling_ratio = 1.,
-  -- fixed_frame_pose_sampling_ratio = 1.,
-  -- imu_sampling_ratio = 1.,
-  -- landmarks_sampling_ratio = 1.,
-  -- publish_tracked_pose = true, 
--- }
--- 
--- MAP_BUILDER.use_trajectory_builder_2d = true
--- 
--- TRAJECTORY_BUILDER_2D.min_range = 0.12
--- TRAJECTORY_BUILDER_2D.max_range = 10.
--- TRAJECTORY_BUILDER_2D.missing_data_ray_length = 3.
--- TRAJECTORY_BUILDER_2D.use_imu_data = true
--- TRAJECTORY_BUILDER_2D.use_online_correlative_scan_matching = true 
--- TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.1)
--- 
--- POSE_GRAPH.constraint_builder.min_score = 0.65
--- POSE_GRAPH.constraint_builder.global_localization_min_score = 0.7
--- 
--- POSE_GRAPH.optimize_every_n_nodes = 100
--- 
--- POSE_GRAPH.optimization_problem.odometry_translation_weight = 0
--- POSE_GRAPH.optimization_problem.odometry_rotation_weight = 0
--- 
--- return options
