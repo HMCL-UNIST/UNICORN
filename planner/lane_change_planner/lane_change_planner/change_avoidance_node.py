@@ -27,7 +27,7 @@ from f110_msgs.msg import (
 )
 from visualization_msgs.msg import MarkerArray, Marker
 from geometry_msgs.msg import Point
-from std_msgs.msg import Float32MultiArray, Float32, Header
+from std_msgs.msg import Float32MultiArray, Float32, Header, Bool
 
 from frenet_conversion.frenet_converter import FrenetConverter
 
@@ -48,6 +48,13 @@ class ChangeAvoidanceNode(Node):
         # Params
         self.local_wpnts = None
         self.lookahead = 15
+
+        # Side hysteresis: only switch preferred_side after the new side persists this many
+        # consecutive loops (20 Hz), to reject brief gap-driven side flips that jitter the path.
+        self.committed_side = None
+        self.pending_side = None
+        self.pending_count = 0
+        self.side_switch_frames = 10
 
         # Scaled waypoints params
         self.scaled_wpnts = None
@@ -79,7 +86,7 @@ class ChangeAvoidanceNode(Node):
         # Solver params
         self.width_car = 0.30
         self.safety_margin = 0.1
-        self.back_to_raceline_before = 5
+        self.back_to_raceline_before = 3.0
         self.back_to_raceline_after = 3
         self.obs_traj_tresh = 2
 
@@ -94,6 +101,10 @@ class ChangeAvoidanceNode(Node):
         # Dynamic reconf params (defaults from cfg/dyn_change_tuner.cfg)
         self.evasion_dist = 0.3
         self.spline_bound_mindist = 0.3
+        # Max allowed |current_d - evasion_d| at the car before the evasion path is
+        # rejected (guards against a too-abrupt lateral jump onto the path). Larger =
+        # allows starting an evasion while closer/tighter to the opponent.
+        self.max_evasion_start_offset = 0.8
 
         # Symmetric lane perturbation (centerline +/- lane_offset -> outer/inner lanes).
         # Adjustable live via rqt: changing it regenerates the two lanes.
@@ -103,6 +114,8 @@ class ChangeAvoidanceNode(Node):
         # Prediction is considered stale if the latest prediction msg is older than this.
         self.pred_timeout = 0.5  # [s]
         self.last_pred_stamp = None
+        # Default True (trail) until told otherwise, so a missing predictor never enables overtaking.
+        self.force_trailing = True
 
         # Only clear the avoidance markers after this many consecutive failed/idle frames, so a
         # single dropped frame doesn't make the markers flicker.
@@ -200,6 +213,15 @@ class ChangeAvoidanceNode(Node):
                     floating_point_range=[FloatingPointRange(from_value=0.05, to_value=5.0, step=0.001)],
                 ),
             },
+            {
+                'name': 'max_evasion_start_offset',
+                'default': self.max_evasion_start_offset,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Reject the evasion path if |current_d - evasion_d| at the car exceeds this [m]. Larger allows starting an evasion while closer to the opponent.",
+                    floating_point_range=[FloatingPointRange(from_value=0.1, to_value=2.0, step=0.001)],
+                ),
+            },
         ]
         self.declare_all_parameters(param_dicts=param_dicts)
         self.add_on_set_parameters_callback(self.dyn_param_cb)
@@ -224,6 +246,9 @@ class ChangeAvoidanceNode(Node):
         self.create_subscription(ObstacleArray, "/tracking/obstacles", self.obs_perception_cb, QoSProfile(depth=10))
         self.create_subscription(ObstacleArray, "/opponent_prediction/obstacles", self.obs_prediction_cb, QoSProfile(depth=10))
         self.create_subscription(PredictionArray, "/opponent_prediction/obstacles_pred", self.obstacle_prediction_cb, QoSProfile(depth=10))
+        # True means the prediction is a constant-velocity fallback (opponent not yet on a learned
+        # GP trajectory). Only the GP-trajectory prediction is trusted for overtaking.
+        self.create_subscription(Bool, "/opponent_prediction/force_trailing", self.force_trailing_cb, QoSProfile(depth=10))
         self.create_subscription(Odometry, "/car_state/odom_frenet", self.state_frenet_cb, QoSProfile(depth=10))
         self.create_subscription(Odometry, "/car_state/odom", self.state_cartesian_cb, QoSProfile(depth=10))
         self.create_subscription(BehaviorStrategy, "/behavior_strategy", self.behavior_cb, QoSProfile(depth=10))
@@ -284,6 +309,8 @@ class ChangeAvoidanceNode(Node):
                 self.lane_offset = param.value
             elif param.name == 'pred_timeout':
                 self.pred_timeout = param.value
+            elif param.name == 'max_evasion_start_offset':
+                self.max_evasion_start_offset = param.value
 
         # Rebuild the outer/inner lanes with the new offset. Only once the centerline
         # is available (i.e. after the initial generate_lanes at startup).
@@ -318,6 +345,9 @@ class ChangeAvoidanceNode(Node):
         # "예측 없음"으로 간주하므로 stale 타임스탬프를 갱신하지 않는다.
         if len(data.predictions) > 0:
             self.last_pred_stamp = self.get_clock().now()
+
+    def force_trailing_cb(self, data: Bool):
+        self.force_trailing = data.data
 
     def prediction_is_fresh(self) -> bool:
         """최근 pred_timeout 초 이내에 비어있지 않은 GP 예측이 도착했으면 True."""
@@ -395,9 +425,29 @@ class ChangeAvoidanceNode(Node):
 
         return considered_obs
 
+    def _apply_side_hysteresis(self, raw_side: str) -> str:
+        if self.committed_side is None:
+            self.committed_side = raw_side
+            self.pending_side = None
+            self.pending_count = 0
+        elif raw_side == self.committed_side:
+            self.pending_side = None
+            self.pending_count = 0
+        else:
+            if raw_side == self.pending_side:
+                self.pending_count += 1
+            else:
+                self.pending_side = raw_side
+                self.pending_count = 1
+            if self.pending_count >= self.side_switch_frames:
+                self.committed_side = raw_side
+                self.pending_side = None
+                self.pending_count = 0
+        return self.committed_side
+
     def more_space(self, obstacle: Obstacle, gb_wpnts, gb_idxs):
-        left_gap = abs(gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left)
-        right_gap = abs(gb_wpnts[gb_idxs[0]].d_right + obstacle.d_right)
+        left_gap = gb_wpnts[gb_idxs[0]].d_left - obstacle.d_left
+        right_gap = gb_wpnts[gb_idxs[0]].d_right + obstacle.d_right
         min_space = self.spline_bound_mindist + self.width_car / 2 + self.safety_margin
 
         if right_gap > min_space and left_gap < min_space:
@@ -529,10 +579,16 @@ class ChangeAvoidanceNode(Node):
         max_kappa = np.max(np.abs(kappas))
         outside = "left" if np.sum(kappas) < 0 else "right"
 
-        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside
+        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside.
+        # s_start/s_end are already unwrapped-forward here, so obs_len is a small positive span
+        # (no modulo needed); the enlongation is capped so a corner's max_kappa can't blow s_end
+        # up by ~a lap and make the path circle the track.
         if side == outside:
             for i in range(len(considered_obs)):
-                considered_obs[i].s_end = considered_obs[i].s_end + (considered_obs[i].s_end - considered_obs[i].s_start) % self.max_s_updated * max_kappa * (self.width_car + self.evasion_dist)
+                obs_len = considered_obs[i].s_end - considered_obs[i].s_start
+                enlongation = obs_len * max_kappa * (self.width_car + self.evasion_dist)
+                enlongation = min(enlongation, self.scaled_max_s * 0.15)
+                considered_obs[i].s_end = considered_obs[i].s_end + enlongation
 
         # obs.s_* are unwrapped forward-of-car (can exceed scaled_max_s), so seed with +/-inf.
         min_s_obs_start = np.inf
@@ -587,11 +643,13 @@ class ChangeAvoidanceNode(Node):
         right_gap_avg = right_gap_sum / right_count if right_count > 0 else 0
 
         if left_count > right_count and left_gap_avg > right_gap_avg and left_gap_avg > self.width_car:
-            preferred_side = "left"
+            raw_side = "left"
         elif right_count > left_count and right_gap_avg > left_gap_avg and right_gap_avg > self.width_car:
-            preferred_side = "right"
+            raw_side = "right"
         else:
             return [], [], [], [], []
+
+        preferred_side = self._apply_side_hysteresis(raw_side)
 
         # ---- Monotonic-s sampling (SQP-style): define an increasing raceline s up front, then
         # ---- pull the target lane's d at each s, ease in/out around the obstacle span, and convert
@@ -604,6 +662,7 @@ class ChangeAvoidanceNode(Node):
         obs_start_u = min(o.s_start for o in considered_obs)
         obs_end_u = max(o.s_end for o in considered_obs)
         end_s = obs_end_u + self.back_to_raceline_after
+        end_s = min(end_s, start_s + self.scaled_max_s * 0.5)
 
         n_samples = max(int((end_s - start_s) / self.scaled_delta_s), 5)
         s_lin = np.linspace(start_s, end_s, n_samples)            # monotonic, unwrapped
@@ -695,7 +754,7 @@ class ChangeAvoidanceNode(Node):
         evasion_v = np.zeros(len(evasion_s))
 
         temp_idx = np.argmin([abs(evs - self.current_s) for evs in evasion_s])
-        if abs(self.current_d - evasion_d[temp_idx]) > 0.5:
+        if abs(self.current_d - evasion_d[temp_idx]) > self.max_evasion_start_offset:
             # print(abs(self.current_d - evasion_d[temp_idx]))
             evasion_x = []
             evasion_y = []
@@ -942,10 +1001,11 @@ class ChangeAvoidanceNode(Node):
         obs = deepcopy(self.obs_perception)
         considered_obs = self.obstacle_preprocessing(obs=obs)
 
-        # Overtake only with a fresh GP prediction. Perception-only overtaking is unstable, so
-        # without prediction we trail: publish no evasion path and clear stale markers.
+        # Overtake only with a fresh GP-trajectory prediction. Perception-only overtaking is
+        # unstable, and force_trailing means the prediction is only a constant-velocity fallback
+        # (opponent not yet on a learned trajectory) -- in both cases we trail instead of evade.
         evasion_ok = False
-        if len(considered_obs) > 0 and self.prediction_is_fresh():
+        if len(considered_obs) > 0 and self.prediction_is_fresh() and not self.force_trailing:
             evasion_x, evasion_y, evasion_s, evasion_d, evasion_v = self.lane_change(considered_obs, self.current_s)
             # Publish merge reagion if evasion track has been found
             if len(evasion_s) > 0:
@@ -960,6 +1020,9 @@ class ChangeAvoidanceNode(Node):
             self.no_evasion_count += 1
             if self.no_evasion_count == self.clear_after_frames:
                 self.clear_all_markers()
+                self.committed_side = None
+                self.pending_side = None
+                self.pending_count = 0
 
         # publish latency
         if self.measure:
