@@ -25,8 +25,12 @@ particle_filter:
     z_hit: 0.75
     sigma_hit: 8.0
     # motion model dispersion constants
+    # x == y (isotropic): noise is added in the world/map frame, so unequal x/y
+    # would tie position uncertainty to the map axes (not the vehicle) and make
+    # the filter depend on map orientation. keep both at the larger value (0.05)
+    # since too-little noise can diverge at high speed.
     motion_dispersion_x: 0.05
-    motion_dispersion_y: 0.025
+    motion_dispersion_y: 0.05
     motion_dispersion_theta: 0.25
     # sensor model variant, variant 2 good for rmgpu, 3 doesn't work for rmgpu
     rangelib_variant: 2 # VAR_REPEAT_ANGLES_EVAL_SENSOR (most stable)
