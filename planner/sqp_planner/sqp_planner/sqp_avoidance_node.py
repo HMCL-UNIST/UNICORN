@@ -314,8 +314,14 @@ class SQPAvoidanceNode(Node):
         danger_flag = False
         # Get the initial guess of the overtaking side (see spliner)
         initial_guess_object = self.group_objects(considered_obs)
-        initial_guess_object_start_idx = np.abs(self.scaled_wpnts - initial_guess_object.s_start).argmin()
-        initial_guess_object_end_idx = np.abs(self.scaled_wpnts - initial_guess_object.s_end).argmin()
+        # BUGFIX: scaled_wpnts is (N,2) [[s,d],...]. Subtracting a scalar from the whole 2D
+        # array and calling argmin() returns a FLATTENED index (0..2N-1) that mixes the s and
+        # d columns and is ~2x the real waypoint index. Downstream (gb_idxs, scaled_wpnts_msg
+        # indexing) then reads the wrong / out-of-range waypoints, so the solver only produced
+        # a valid path near s=0 (where the 2x error is small). Slice the s column ONLY, exactly
+        # like the scaled_wpnts_indices computation further down.
+        initial_guess_object_start_idx = np.abs(self.scaled_wpnts[:, 0] - initial_guess_object.s_start).argmin()
+        initial_guess_object_end_idx = np.abs(self.scaled_wpnts[:, 0] - initial_guess_object.s_end).argmin()
         # Get array of indexes of the global waypoints overlapping with the ROC
         gb_idxs = np.array(range(initial_guess_object_start_idx, initial_guess_object_start_idx + (initial_guess_object_end_idx - initial_guess_object_start_idx)%self.scaled_max_idx))%self.scaled_max_idx
         # If the ROC is too short, we take the next 20 waypoints
@@ -328,10 +334,18 @@ class SQPAvoidanceNode(Node):
         max_kappa = np.max(np.abs(kappas))
         outside = "left" if np.sum(kappas) < 0 else "right"
 
-        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside
+        # Enlongate the ROC if our initial guess suggests that we are overtaking on the outside.
+        # NOTE: wrap-safe. obs_len is the (positive) obstacle length in s; if the obstacle
+        # straddles the start/finish line s_end < s_start, so we take it modulo the track
+        # length. The enlongation is then clamped so a single obstacle can never push s_end
+        # more than a fraction of a lap ahead (previously it could explode when the raw
+        # (s_end - s_start) went negative and %max_s_updated blew it up to ~one lap).
         if side == outside:
             for i in range(len(considered_obs)):
-                considered_obs[i].s_end = considered_obs[i].s_end + (considered_obs[i].s_end - considered_obs[i].s_start)%self.max_s_updated * max_kappa * (self.width_car + self.evasion_dist)
+                obs_len = (considered_obs[i].s_end - considered_obs[i].s_start) % self.scaled_max_s
+                enlongation = obs_len * max_kappa * (self.width_car + self.evasion_dist)
+                enlongation = min(enlongation, self.scaled_max_s * 0.15)
+                considered_obs[i].s_end = considered_obs[i].s_end + enlongation
 
         min_s_obs_start = self.scaled_max_s
         max_s_obs_end = 0
@@ -344,9 +358,17 @@ class SQPAvoidanceNode(Node):
             if obs.d_left > 3 or obs.d_right < -3:
                 danger_flag = True
 
-        # Get local waypoints to check where we are and where we are heading
+        # Get local waypoints to check where we are and where we are heading.
+        # Work in an UNWRAPPED s frame that starts at the car (start_avoidance = cur_s) and
+        # only ever grows forward. The obstacle end is measured as a forward distance from the
+        # car (wrap-safe), then the whole avoidance window is clamped to at most half a lap so
+        # the path can never span more than one lap and produce duplicate/wrapped s values
+        # downstream (this was the root cause of the "path longer than one lap" bug).
         start_avoidance = cur_s
-        end_avoidance = max_s_obs_end + self.back_to_raceline_after
+        fwd_to_obs_end = (max_s_obs_end - cur_s) % self.scaled_max_s
+        avoidance_len = fwd_to_obs_end + self.back_to_raceline_after
+        avoidance_len = min(avoidance_len, self.scaled_max_s * 0.5)
+        end_avoidance = start_avoidance + avoidance_len
 
         # Get a downsampled version for s avoidance points
         s_avoidance = np.linspace(start_avoidance, end_avoidance, self.avoidance_resolution)
@@ -438,7 +460,14 @@ class SQPAvoidanceNode(Node):
             resp = resp.transpose()
             smoothed_xy_points = self.ccma.filter(resp)
             smoothed_sd_points = self.converter.get_frenet(smoothed_xy_points[:, 0], smoothed_xy_points[:, 1])
-            evasion_s, evasion_d = zip(*sorted(zip(smoothed_sd_points[0], smoothed_sd_points[1])))
+            # Keep the ORIGINAL generation order for every array. The s values already grow
+            # monotonically along the path (the avoidance window is < half a lap), so they are
+            # already ordered. Do NOT sort s/d independently: x/y/psi/kappa/v are not sorted, so
+            # sorting only s/d would misalign every waypoint's (s,d) from its (x,y). The only
+            # thing get_frenet does is wrap s into [0, max_s); a single start/finish crossing is
+            # left for the downstream merger to handle, exactly like the static planner.
+            evasion_s = np.asarray(smoothed_sd_points[0])
+            evasion_d = np.asarray(smoothed_sd_points[1])
             evasion_x = smoothed_xy_points[:, 0]
             evasion_y = smoothed_xy_points[:, 1]
             evasion_coords = np.column_stack((evasion_x, evasion_y))

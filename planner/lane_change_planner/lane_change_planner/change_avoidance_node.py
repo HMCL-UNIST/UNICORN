@@ -22,17 +22,13 @@ from f110_msgs.msg import (
     Obstacle,
     ObstacleArray,
     OTWpntArray,
-    OpponentTrajectory,
-    OppWpnt,
     BehaviorStrategy,
     PredictionArray,
 )
 from visualization_msgs.msg import MarkerArray, Marker
 from geometry_msgs.msg import Point
-from std_msgs.msg import Float32MultiArray, Float32, Bool, Header
+from std_msgs.msg import Float32MultiArray, Float32, Header
 
-from scipy.optimize import minimize
-from scipy.interpolate import BPoly
 from frenet_conversion.frenet_converter import FrenetConverter
 
 from ccma import CCMA
@@ -40,15 +36,8 @@ from ccma import CCMA
 if not hasattr(np, "row_stack"):
     np.row_stack = np.vstack
 import trajectory_planning_helpers as tph
-from transforms3d.euler import quat2euler
 from grid_filter.grid_filter import GridFilter
 import matplotlib.pyplot as plt
-
-
-def euler_from_quaternion(quaternion):
-    """quaternion is [x, y, z, w]; returns (roll, pitch, yaw)."""
-    x, y, z, w = quaternion
-    return quat2euler([w, x, y, z])
 
 
 class ChangeAvoidanceNode(Node):
@@ -59,7 +48,6 @@ class ChangeAvoidanceNode(Node):
         # Params
         self.local_wpnts = None
         self.lookahead = 15
-        self.past_avoidance_d = []
 
         # Scaled waypoints params
         self.scaled_wpnts = None
@@ -74,63 +62,55 @@ class ChangeAvoidanceNode(Node):
         self.inner_lane_wpnts_msg = WpntArray()
         self.center_wpnts_received = False
 
+        # Cached lane polylines for the fixed-rate lane-marker publisher (set in generate_lanes).
+        self._center_xy = None
+        self._outer_xy = None
+        self._inner_xy = None
+
         # Updated waypoints params
         self.wpnts_updated = None
         self.max_s_updated = None
-        self.max_idx_updated = None
 
         # Obstalces params
-        self.obs = ObstacleArray()
         self.obs_perception = ObstacleArray()
         self.obs_prediction = ObstacleArray()
         self.obs_prediction_pred = PredictionArray()
 
-        # Opponent waypoint params
-        self.opponent_waypoints = OpponentTrajectory()
-        self.max_opp_idx = None
-        self.opponent_wpnts_sm = None
-
-        # OT params
-        self.last_ot_side = ""
-        self.ot_section_check = False
-
         # Solver params
-        self.min_radius = 0.55  # wheelbase / np.tan(max_steering)
-        self.max_kappa = 1 / self.min_radius
         self.width_car = 0.30
         self.safety_margin = 0.1
-        self.avoidance_resolution = 20
         self.back_to_raceline_before = 5
-        self.back_to_raceline_after = 5
+        self.back_to_raceline_after = 3
         self.obs_traj_tresh = 2
 
         # Dynamic sovler params
         self.down_sampled_delta_s = 0.1
-        self.global_traj_kappas = None
 
         # State variables (filled by callbacks)
         self.current_s = None
         self.current_d = None
-        self.current_vs = None
         self.current_x = None
-        self.current_y = None
-        self.current_yaw = None
-        self.current_vx = None
-        self.local_wpnts_msg = None
-        self.ego_prediction = None
 
         # Dynamic reconf params (defaults from cfg/dyn_change_tuner.cfg)
         self.evasion_dist = 0.3
-        self.obs_traj_tresh = 1.0
         self.spline_bound_mindist = 0.3
 
-        # Dynamic reconf params
-        self.avoid_static_obs = True
+        # Symmetric lane perturbation (centerline +/- lane_offset -> outer/inner lanes).
+        # Adjustable live via rqt: changing it regenerates the two lanes.
+        self.lane_offset = 0.4
+
+        # Require fresh GP prediction before overtaking. Without it we only trail.
+        # Prediction is considered stale if the latest prediction msg is older than this.
+        self.pred_timeout = 0.5  # [s]
+        self.last_pred_stamp = None
+
+        # Only clear the avoidance markers after this many consecutive failed/idle frames, so a
+        # single dropped frame doesn't make the markers flicker.
+        self.no_evasion_count = 0
+        self.clear_after_frames = 5
 
         self.converter = None
         self.global_waypoints = None
-        self.gb_max_idx = None
-        self.gb_max_s = None
 
         # CCMA init
         self.ccma = CCMA(w_ma=10, w_cc=5)
@@ -146,7 +126,7 @@ class ChangeAvoidanceNode(Node):
                                ParameterDescriptor(type=ParameterType.PARAMETER_BOOL))
         self.vis = self.get_parameter('vis').get_parameter_value().bool_value
 
-        # Dynamic reconfigure -> declared parameters with FloatingPointRange
+        # Dynamic reconfigure -> declared ROS2 parameters
         param_dicts = [
             {
                 'name': 'evasion_dist',
@@ -155,6 +135,33 @@ class ChangeAvoidanceNode(Node):
                     type=ParameterType.PARAMETER_DOUBLE,
                     description="Orthogonal distance of the apex to the obstacle",
                     floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.25, step=0.001)],
+                ),
+            },
+            {
+                'name': 'safety_margin',
+                'default': self.safety_margin,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Safety margin around the vehicle and obstacles",
+                    floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.0, step=0.001)],
+                ),
+            },
+            {
+                'name': 'back_to_raceline_before',
+                'default': self.back_to_raceline_before,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Distance before the obstacle used to return to the raceline",
+                    floating_point_range=[FloatingPointRange(from_value=0.0, to_value=30.0, step=0.001)],
+                ),
+            },
+            {
+                'name': 'back_to_raceline_after',
+                'default': self.back_to_raceline_after,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Distance after the obstacle used to return to the raceline",
+                    floating_point_range=[FloatingPointRange(from_value=0.0, to_value=30.0, step=0.001)],
                 ),
             },
             {
@@ -175,6 +182,24 @@ class ChangeAvoidanceNode(Node):
                     floating_point_range=[FloatingPointRange(from_value=0.05, to_value=1.0, step=0.001)],
                 ),
             },
+            {
+                'name': 'lane_offset',
+                'default': self.lane_offset,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Symmetric perturbation of the centerline to build outer/inner lanes [m]. Live editable, regenerates lanes.",
+                    floating_point_range=[FloatingPointRange(from_value=0.0, to_value=1.5, step=0.001)],
+                ),
+            },
+            {
+                'name': 'pred_timeout',
+                'default': self.pred_timeout,
+                'descriptor': ParameterDescriptor(
+                    type=ParameterType.PARAMETER_DOUBLE,
+                    description="Overtake only if a GP prediction arrived within this time, else trail [s]",
+                    floating_point_range=[FloatingPointRange(from_value=0.05, to_value=5.0, step=0.001)],
+                ),
+            },
         ]
         self.declare_all_parameters(param_dicts=param_dicts)
         self.add_on_set_parameters_callback(self.dyn_param_cb)
@@ -188,11 +213,17 @@ class ChangeAvoidanceNode(Node):
 
         self.spline_sample_pub = self.create_publisher(MarkerArray, "/spline_sample_points", QoSProfile(depth=10))
 
+        # Lane visualization (always published, independent of the `vis` matplotlib flag).
+        # Outer/inner perturbed lanes in distinct colors + how far each is offset from center.
+        self.lane_mrks_pub = self.create_publisher(MarkerArray, "/planner/avoidance/lane_markers", QoSProfile(depth=10))
+        self.lane_offset_pub = self.create_publisher(Float32MultiArray, "/planner/avoidance/lane_offset", QoSProfile(depth=10))
+        # Large spheres at the avoidance start/end so we can see exactly which points are picked.
+        self.avoidance_pts_pub = self.create_publisher(MarkerArray, "/planner/avoidance/start_end_markers", QoSProfile(depth=10))
+
         # Subscribers
         self.create_subscription(ObstacleArray, "/tracking/obstacles", self.obs_perception_cb, QoSProfile(depth=10))
         self.create_subscription(ObstacleArray, "/opponent_prediction/obstacles", self.obs_prediction_cb, QoSProfile(depth=10))
         self.create_subscription(PredictionArray, "/opponent_prediction/obstacles_pred", self.obstacle_prediction_cb, QoSProfile(depth=10))
-        self.create_subscription(PredictionArray, "/mpc_controller/ego_prediction", self.ego_prediction_cb, QoSProfile(depth=10))
         self.create_subscription(Odometry, "/car_state/odom_frenet", self.state_frenet_cb, QoSProfile(depth=10))
         self.create_subscription(Odometry, "/car_state/odom", self.state_cartesian_cb, QoSProfile(depth=10))
         self.create_subscription(BehaviorStrategy, "/behavior_strategy", self.behavior_cb, QoSProfile(depth=10))
@@ -200,9 +231,6 @@ class ChangeAvoidanceNode(Node):
         self.create_subscription(WpntArray, "/global_waypoints_scaled", self.scaled_wpnts_cb, QoSProfile(depth=10))
         self.create_subscription(WpntArray, "/global_waypoints_updated", self.updated_wpnts_cb, QoSProfile(depth=10))
         self.create_subscription(WpntArray, "/centerline_waypoints", self.center_wpnts_cb, QoSProfile(depth=10))
-        self.create_subscription(OpponentTrajectory, "/opponent_trajectory", self.opponent_trajectory_cb, QoSProfile(depth=10))
-        self.create_subscription(Bool, "/ot_section_check", self.ot_sections_check_cb, QoSProfile(depth=10))
-        self.create_subscription(Marker, "/lookahead_point", self.lookahead_callback, QoSProfile(depth=10))
 
         self.converter = self.initialize_converter()
 
@@ -213,12 +241,6 @@ class ChangeAvoidanceNode(Node):
         self.wait_for_message_attr('center_wpnts_received')
         self.generate_lanes(center_wpnts=self.center_wpnts_msg)
 
-        self.num_extra_points = 100
-        self.num_extra_global_points = 20
-
-        self.lookahead_point_x = None
-        self.lookahead_point_y = None
-
         # Wait for critical messages and services
         self.get_logger().info("[OBS Spliner] Waiting for messages and services...")
         self.wait_for_loop_messages()
@@ -226,6 +248,11 @@ class ChangeAvoidanceNode(Node):
 
         # Main loop timer at 20 Hz
         self.create_timer(1.0 / 20.0, self.loop)
+
+        # Republish the lane markers + offset at a fixed rate so they stay visible in rviz
+        # without touching rqt or regenerating the lanes.
+        self.lane_viz_hz = 5.0
+        self.create_timer(1.0 / self.lane_viz_hz, self.lane_viz_loop)
 
     #################### DYNAMIC PARAMS ####################
     def declare_all_parameters(self, param_dicts: List[dict]):
@@ -237,19 +264,43 @@ class ChangeAvoidanceNode(Node):
         return params
 
     def dyn_param_cb(self, params: List[Parameter]):
+        regenerate_lanes = False
         for param in params:
             if param.name == 'evasion_dist':
                 self.evasion_dist = param.value
+            elif param.name == 'safety_margin':
+                self.safety_margin = param.value
+            elif param.name == 'back_to_raceline_before':
+                self.back_to_raceline_before = param.value
+            elif param.name == 'back_to_raceline_after':
+                self.back_to_raceline_after = param.value
             elif param.name == 'obs_traj_tresh':
                 self.obs_traj_tresh = param.value
             elif param.name == 'spline_bound_mindist':
                 self.spline_bound_mindist = param.value
+            elif param.name == 'lane_offset':
+                if param.value != self.lane_offset:
+                    regenerate_lanes = True
+                self.lane_offset = param.value
+            elif param.name == 'pred_timeout':
+                self.pred_timeout = param.value
+
+        # Rebuild the outer/inner lanes with the new offset. Only once the centerline
+        # is available (i.e. after the initial generate_lanes at startup).
+        if regenerate_lanes and self.center_wpnts_received:
+            self.generate_lanes(center_wpnts=self.center_wpnts_msg)
+            self.get_logger().info(f"[Planner] Regenerated lanes with lane_offset={self.lane_offset} [m]")
 
         self.get_logger().info(
             f"[Planner] Dynamic reconf triggered new spline params: \n"
             f" Evasion apex distance: {self.evasion_dist} [m],\n"
+            f" Safety margin: {self.safety_margin} [m],\n"
+            f" Back to raceline before: {self.back_to_raceline_before} [m],\n"
+            f" Back to raceline after: {self.back_to_raceline_after} [m],\n"
             f" Obstacle trajectory treshold: {self.obs_traj_tresh} [m]\n"
             f" Spline boundary mindist: {self.spline_bound_mindist} [m]\n"
+            f" Lane offset: {self.lane_offset} [m]\n"
+            f" Prediction timeout: {self.pred_timeout} [s]\n"
         )
         return SetParametersResult(successful=True)
 
@@ -263,26 +314,27 @@ class ChangeAvoidanceNode(Node):
 
     def obstacle_prediction_cb(self, data: PredictionArray):
         self.obs_prediction_pred = data
+        # GP 예측이 실제로 도착한 시각을 기록 (예측 신선도 판정용). predictions가 비어있으면
+        # "예측 없음"으로 간주하므로 stale 타임스탬프를 갱신하지 않는다.
+        if len(data.predictions) > 0:
+            self.last_pred_stamp = self.get_clock().now()
 
-    def ego_prediction_cb(self, data: PredictionArray):
-        self.ego_prediction = data
+    def prediction_is_fresh(self) -> bool:
+        """최근 pred_timeout 초 이내에 비어있지 않은 GP 예측이 도착했으면 True."""
+        if self.last_pred_stamp is None:
+            return False
+        dt = (self.get_clock().now() - self.last_pred_stamp).nanoseconds * 1e-9
+        return dt <= self.pred_timeout
 
     def state_frenet_cb(self, data: Odometry):
         self.current_s = data.pose.pose.position.x
         self.current_d = data.pose.pose.position.y
-        self.current_vs = data.twist.twist.linear.x
 
     def state_cartesian_cb(self, data: Odometry):
         self.current_x = data.pose.pose.position.x
-        self.current_y = data.pose.pose.position.y
-        quaternion = [data.pose.pose.orientation.x, data.pose.pose.orientation.y, data.pose.pose.orientation.z, data.pose.pose.orientation.w]
-        self.current_roll, self.current_pitch, self.current_yaw = euler_from_quaternion(quaternion)
-        self.current_vx = data.twist.twist.linear.x
 
     def gb_cb(self, data: WpntArray):
         self.global_waypoints = np.array([[wpnt.x_m, wpnt.y_m] for wpnt in data.wpnts])
-        self.gb_max_idx = data.wpnts[-1].id
-        self.gb_max_s = data.wpnts[-1].s_m
 
     def scaled_wpnts_cb(self, data: WpntArray):
         self.scaled_wpnts = np.array([[wpnt.s_m, wpnt.d_m] for wpnt in data.wpnts])
@@ -297,30 +349,13 @@ class ChangeAvoidanceNode(Node):
     def updated_wpnts_cb(self, data: WpntArray):
         self.wpnts_updated = data.wpnts[:-1]
         self.max_s_updated = self.wpnts_updated[-1].s_m
-        self.max_idx_updated = self.wpnts_updated[-1].id
 
     def center_wpnts_cb(self, data: WpntArray):
         self.center_wpnts_msg = data
-        self.center_wpnts_max_s = data.wpnts[-1].s_m
-        self.center_wpnts_max_idx = data.wpnts[-1].id
         self.center_wpnts_received = True
 
     def behavior_cb(self, data: BehaviorStrategy):
-        self.local_wpnts_msg = data
         self.local_wpnts = np.array([[wpnt.s_m, wpnt.d_m] for wpnt in data.local_wpnts])
-
-    def opponent_trajectory_cb(self, data: OpponentTrajectory):
-        self.opponent_waypoints = data.oppwpnts
-        self.max_opp_idx = len(data.oppwpnts) - 1
-        self.opponent_wpnts_sm = np.array([wpnt.s_m for wpnt in data.oppwpnts])
-
-    def ot_sections_check_cb(self, data: Bool):
-        self.ot_section_check = data.data
-
-    def lookahead_callback(self, data):
-        if data.id == 100:
-            self.lookahead_point_x = data.pose.position.x
-            self.lookahead_point_y = data.pose.position.y
 
     ### Common Functions ###
     def wait_for_message_attr(self, attr_name: str):
@@ -353,9 +388,8 @@ class ChangeAvoidanceNode(Node):
         considered_obs = []
         for obs in obs.obstacles:
             if (obs.s_start - self.current_s) % self.scaled_max_s < self.lookahead and abs(obs.d_center - self.current_d) < self.obs_traj_tresh:
-                if False and obs.id == self.obs_prediction_pred.id and len(self.obs_prediction.obstacles) == 20:
-                    for opd in self.obs_prediction.obstacles:
-                        considered_obs.append(opd)
+                if obs.id == self.obs_prediction_pred.id and len(self.obs_prediction.obstacles) > 0:
+                    considered_obs.extend(self.obs_prediction.obstacles)
                 else:
                     considered_obs.append(obs)
 
@@ -382,11 +416,22 @@ class ChangeAvoidanceNode(Node):
                 d_apex_left = 0
             return "left", d_apex_left, left_gap, right_gap
         elif left_gap < min_space and right_gap < min_space:
-            # self.get_logger().warn("No enough gap!")
+            # Both sides too narrow: genuinely no room -> don't overtake.
             return None, 0.0, left_gap, right_gap
         else:
-            # self.get_logger().warn("This happen!")
-            return None, 0.0, left_gap, right_gap
+            # Both sides wide enough: pick the wider one instead of giving up (old code returned
+            # None here, so a clearly-open side was wasted). Only the ambiguous "both open" case
+            # falls here; the "both narrow" case above still returns None.
+            if left_gap >= right_gap:
+                d_apex_left = obstacle.d_left + (self.width_car / 2 + self.safety_margin + 0.2)
+                if d_apex_left < 0 and left_gap < abs(d_apex_left):
+                    d_apex_left = 0
+                return "left", d_apex_left, left_gap, right_gap
+            else:
+                d_apex_right = obstacle.d_right - (self.width_car / 2 + self.safety_margin + 0.2)
+                if d_apex_right > 0 and right_gap < abs(d_apex_right):
+                    d_apex_right = 0
+                return "right", d_apex_right, left_gap, right_gap
 
     ### Visualize SPL Rviz ###
     def visualize_dynamic_spliner(self, evasion_s, evasion_d, evasion_x, evasion_y, evasion_v):
@@ -394,6 +439,10 @@ class ChangeAvoidanceNode(Node):
         if len(evasion_s) == 0:
             pass
         else:
+            # DELETEALL first so a shorter path this frame leaves no leftover cylinders.
+            del_mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"))
+            del_mrk.action = Marker.DELETEALL
+            mrks.markers.append(del_mrk)
             resp = self.converter.get_cartesian(evasion_s, evasion_d)
             for i in range(len(evasion_s)):
                 mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"))
@@ -411,6 +460,7 @@ class ChangeAvoidanceNode(Node):
                 mrk.pose.position.y = evasion_y[i]
                 mrk.pose.position.z = evasion_v[i] / self.scaled_vmax / 2
                 mrk.pose.orientation.w = 1.0
+                mrk.lifetime = rclpy.duration.Duration(seconds=0.3).to_msg()
                 mrks.markers.append(mrk)
             self.mrks_pub.publish(mrks)
 
@@ -440,10 +490,33 @@ class ChangeAvoidanceNode(Node):
         self.spline_sample_pub.publish(marker_array)
 
     ### Lane Change Avoidance ###
+    def _unwrap_forward(self, s: float, ref_s: float) -> float:
+        """Return s expressed as ref_s + forward-distance, so it is always >= ref_s and monotonic
+        across the s=0 seam. A point up to `back_tol` behind ref_s (perception jitter) is clamped
+        to ref_s instead of being wrapped a whole lap forward (which flashed the path backwards)."""
+        back_tol = 1.0
+        fwd = (s - ref_s) % self.scaled_max_s
+        if fwd > self.scaled_max_s - back_tol:
+            fwd = 0.0
+        return ref_s + fwd
+
     def lane_change(self, considered_obs: list, cur_s: float):
-        # Get the initial guess of the overtaking side
-        initial_guess_object_start_idx = np.abs(self.scaled_wpnts - considered_obs[0].s_start).argmin()
-        initial_guess_object_end_idx = np.abs(self.scaled_wpnts - considered_obs[-1].s_end).argmin()
+        # Normalize every obstacle's s to be unwrapped and forward of the car up front, so the
+        # ROC index math, the s_end elongation and s_avoidance below all stay monotonic and can
+        # never span a lap. Downstream still wraps at publish time.
+        for obs in considered_obs:
+            obs.s_start = self._unwrap_forward(obs.s_start, self.current_s)
+            obs.s_end = self._unwrap_forward(obs.s_end, self.current_s)
+            obs.s_center = self._unwrap_forward(obs.s_center, self.current_s)
+            if obs.s_end < obs.s_start:
+                obs.s_end += self.scaled_max_s
+
+        # Get the initial guess of the overtaking side.
+        # scaled_wpnts is [[s, d], ...]; match on the s column only. np.abs(2D-scalar).argmin()
+        # would return a flattened index (~2x) and pick the wrong waypoint.
+        scaled_s = self.scaled_wpnts[:, 0]
+        initial_guess_object_start_idx = np.abs(scaled_s - considered_obs[0].s_start % self.scaled_max_s).argmin()
+        initial_guess_object_end_idx = np.abs(scaled_s - considered_obs[-1].s_end % self.scaled_max_s).argmin()
 
         # Get array of indexes of the global waypoints overlapping with the ROC
         gb_idxs = np.array(range(initial_guess_object_start_idx, initial_guess_object_start_idx + (initial_guess_object_end_idx - initial_guess_object_start_idx) % self.scaled_max_idx)) % self.scaled_max_idx
@@ -461,8 +534,9 @@ class ChangeAvoidanceNode(Node):
             for i in range(len(considered_obs)):
                 considered_obs[i].s_end = considered_obs[i].s_end + (considered_obs[i].s_end - considered_obs[i].s_start) % self.max_s_updated * max_kappa * (self.width_car + self.evasion_dist)
 
-        min_s_obs_start = self.scaled_max_s
-        max_s_obs_end = 0
+        # obs.s_* are unwrapped forward-of-car (can exceed scaled_max_s), so seed with +/-inf.
+        min_s_obs_start = np.inf
+        max_s_obs_end = -np.inf
 
         for obs in considered_obs:
             if obs.s_start < min_s_obs_start:
@@ -481,18 +555,6 @@ class ChangeAvoidanceNode(Node):
         if s_avoidance.size == 0:
             self.get_logger().warn("s_avoidance is empty! Skipping avoidance.")
             return [], [], [], [], []
-
-        # Get the closest scaled waypoint for every s avoidance point (down sampled)
-        scaled_wpnts_indices = np.array([np.abs(self.scaled_wpnts[:, 0] - s % self.scaled_max_s).argmin() for s in s_avoidance])
-
-        # Get the min radius
-        # # Clip speed
-        clipped_speed = np.clip(self.current_vs, 1.0, a_max=None)
-        # Get the minimum of clipped speed and the updated speed of the first waypoints
-        radius_speed = min([clipped_speed, self.wpnts_updated[(scaled_wpnts_indices[0]) % self.max_idx_updated].vx_mps])
-        # Interpolate the min_radius with speeds between 0.2 and 7 m
-        self.min_radius = np.interp(radius_speed, [1, 6, 7], [0.2, 2, 4])
-        self.max_kappa = 1 / self.min_radius
 
         initial_guess = np.zeros(len(s_avoidance))
         max_obs_idx_center = 0
@@ -534,16 +596,13 @@ class ChangeAvoidanceNode(Node):
         # ---- Monotonic-s sampling (SQP-style): define an increasing raceline s up front, then
         # ---- pull the target lane's d at each s, ease in/out around the obstacle span, and convert
         # ---- to cartesian. s is monotonic by construction so the published path can never reverse.
-        target_wpnts = self.inner_lane_wpnts_msg.wpnts if preferred_side == "left" else self.outer_lane_wpnts_msg.wpnts
+        target_wpnts = self.outer_lane_wpnts_msg.wpnts if preferred_side == "left" else self.inner_lane_wpnts_msg.wpnts
 
-        # Obstacle span unwrapped relative to the car so it stays monotonic across the s=0 seam.
+        # obs.s_* were already unwrapped forward-of-car at the top of lane_change, so the span is
+        # monotonic and cannot circle the track. Just take the min/max directly.
         start_s = self.current_s
-        obs_start_u = obs_start = min(o.s_start for o in considered_obs)
+        obs_start_u = min(o.s_start for o in considered_obs)
         obs_end_u = max(o.s_end for o in considered_obs)
-        if obs_start_u < start_s:
-            obs_start_u += self.scaled_max_s
-        while obs_end_u < obs_start_u:
-            obs_end_u += self.scaled_max_s
         end_s = obs_end_u + self.back_to_raceline_after
 
         n_samples = max(int((end_s - start_s) / self.scaled_delta_s), 5)
@@ -552,16 +611,19 @@ class ChangeAvoidanceNode(Node):
         # Target lane d along s (full avoidance offset); raceline d = 0.
         lane_d = self._lane_d_at_s(target_wpnts, s_lin)
 
-        # Cosine ease: 0 (raceline) before the obstacle, ramp to lane_d across the obstacle, ramp back.
-        ramp = self.back_to_raceline_before
+        # Cosine ease: 0 (raceline) before the obstacle, ramp to lane_d across the obstacle, ramp
+        # back. Entry ramp width = back_to_raceline_before, exit ramp width = back_to_raceline_after
+        # (separate, so the approach and the return to the raceline can be tuned independently).
+        ramp_in = self.back_to_raceline_before
+        ramp_out = self.back_to_raceline_after
         d_arr = np.zeros_like(s_lin)
         for i, s in enumerate(s_lin):
-            if s < obs_start_u - ramp or s > obs_end_u + ramp:
+            if s < obs_start_u - ramp_in or s > obs_end_u + ramp_out:
                 w = 0.0
             elif s < obs_start_u:
-                w = 0.5 * (1 - np.cos(np.pi * (s - (obs_start_u - ramp)) / ramp))
+                w = 0.5 * (1 - np.cos(np.pi * (s - (obs_start_u - ramp_in)) / ramp_in))
             elif s > obs_end_u:
-                w = 0.5 * (1 + np.cos(np.pi * (s - obs_end_u) / ramp))
+                w = 0.5 * (1 + np.cos(np.pi * (s - obs_end_u) / ramp_out))
             else:
                 w = 1.0
             d_arr[i] = w * lane_d[i]
@@ -588,14 +650,28 @@ class ChangeAvoidanceNode(Node):
 
         smoothed_xy_points = self.ccma.filter(samples)
         smoothed_sd_points = self.converter.get_frenet(smoothed_xy_points[:, 0], smoothed_xy_points[:, 1])
-        # samples are already s-monotonic; keep x/y and s/d in that order (no sort) and wrap s.
         evasion_x = np.asarray(smoothed_xy_points[:, 0])
         evasion_y = np.asarray(smoothed_xy_points[:, 1])
-        evasion_s = np.asarray(smoothed_sd_points[0]) % self.scaled_max_s
         evasion_d = np.asarray(smoothed_sd_points[1])
+        # get_frenet returns wrapped s; CCMA can locally reorder s near the apex. Unwrap, then
+        # keep only strictly-increasing s to drop duplicate/reversing points (NaN source).
+        evasion_s_raw = np.asarray(smoothed_sd_points[0])
+        evasion_s = start_s + (evasion_s_raw - start_s) % self.scaled_max_s
+
+        keep = np.ones(len(evasion_s), dtype=bool)
+        last_s = -np.inf
+        for i in range(len(evasion_s)):
+            if evasion_s[i] - last_s > 1e-4:
+                last_s = evasion_s[i]
+            else:
+                keep[i] = False
+        evasion_x = evasion_x[keep]
+        evasion_y = evasion_y[keep]
+        evasion_s = evasion_s[keep]
+        evasion_d = evasion_d[keep]
         evasion_coords = np.column_stack((evasion_x, evasion_y))
 
-        # Guard: drop coincident points (zero-length segments -> NaN psi/kappa/velocity).
+        # Guard: drop coincident xy points (zero-length segments -> NaN psi/kappa).
         if len(evasion_coords) >= 2:
             seg = np.linalg.norm(np.diff(evasion_coords, axis=0), axis=1)
             keep = np.concatenate([[True], seg > 1e-6])
@@ -607,6 +683,8 @@ class ChangeAvoidanceNode(Node):
                 evasion_coords = evasion_coords[keep]
         if len(evasion_coords) < 3 or not np.all(np.isfinite(evasion_coords)):
             return [], [], [], [], []
+
+        evasion_s = evasion_s % self.scaled_max_s
 
         evasion_psi, evasion_kappa = tph.calc_head_curv_num.calc_head_curv_num(
             path=evasion_coords,
@@ -631,15 +709,12 @@ class ChangeAvoidanceNode(Node):
         evasion_wpnts = []
         evasion_wpnts = [Wpnt(id=len(evasion_wpnts), s_m=s, d_m=d, x_m=x, y_m=y, psi_rad=p, kappa_radpm=k, vx_mps=v) for x, y, s, d, p, k, v in zip(evasion_x, evasion_y, evasion_s, evasion_d, evasion_psi, evasion_kappa, evasion_v)]
         evasion_wpnts_msg.wpnts = evasion_wpnts
-        # self.past_avoidance_d = initial_guess
-        mean_d = np.mean(evasion_d)
-        if mean_d > 0:
-            self.last_ot_side = "left"
-        else:
-            self.last_ot_side = "right"
 
         self.evasion_pub.publish(evasion_wpnts_msg)
         self.visualize_dynamic_spliner(evasion_s, evasion_d, evasion_x, evasion_y, evasion_v)
+        # Only publish the start/end debug spheres once the path actually succeeds, so they track
+        # the published path instead of flickering on every early-return frame.
+        self.publish_start_end_markers(start_s, obs_start_u, obs_end_u, end_s)
 
         return evasion_x, evasion_y, evasion_s, evasion_d, evasion_v
 
@@ -679,15 +754,26 @@ class ChangeAvoidanceNode(Node):
         # outer_lane = original_center_wpnts + normals * min_center_left_gap
         # inner_lane = original_center_wpnts - normals * min_center_right_gap
 
-        # 2. Constant othogonal evasion
-        outer_lane = original_center_wpnts + normals * 0.35
-        inner_lane = original_center_wpnts - normals * 0.35
+        # 2. Constant othogonal evasion (symmetric perturbation, live-tunable via lane_offset)
+        outer_lane = original_center_wpnts + normals * self.lane_offset
+        inner_lane = original_center_wpnts - normals * self.lane_offset
 
         outer_lane_resampled = self.resample_lane(outer_lane, resolution=0.1)
         inner_lane_resampled = self.resample_lane(inner_lane, resolution=0.1)
 
         outer_s, outer_d = self.converter.get_frenet(outer_lane_resampled[:, 0], outer_lane_resampled[:, 1])
         inner_s, inner_d = self.converter.get_frenet(inner_lane_resampled[:, 0], inner_lane_resampled[:, 1])
+
+        # Robustness: the xy-normal above ([sin,-cos]) assumes a specific psi convention/track
+        # direction (CW vs CCW), so "outer" can come out on the wrong side. Downstream this
+        # module treats outer_lane as the LEFT (+d) lane (preferred_side=="left" -> outer). f1tenth
+        # frenet has d>0 to the left, so if the measured mean d of outer is negative the lanes are
+        # flipped -> swap them. This keeps left/right correct for any map orientation.
+        if np.mean(outer_d) < np.mean(inner_d):
+            outer_lane_resampled, inner_lane_resampled = inner_lane_resampled, outer_lane_resampled
+            outer_s, inner_s = inner_s, outer_s
+            outer_d, inner_d = inner_d, outer_d
+            self.get_logger().info("[Planner] outer/inner lanes swapped to match frenet +d=left convention")
 
         outer_lane_resampled_psi, outer_lane_resampled_kappa = tph.calc_head_curv_num.calc_head_curv_num(
                 path=outer_lane_resampled,
@@ -712,6 +798,10 @@ class ChangeAvoidanceNode(Node):
 
         self.outer_lane_wpnts_msg.header.frame_id = "map"
         self.inner_lane_wpnts_msg.header.frame_id = "map"
+
+        # Clear so a live regeneration (lane_offset change) doesn't append onto the old lanes.
+        self.outer_lane_wpnts_msg.wpnts = []
+        self.inner_lane_wpnts_msg.wpnts = []
 
         for i in range(len(outer_lane_resampled)):
             wpnt = Wpnt()
@@ -763,6 +853,87 @@ class ChangeAvoidanceNode(Node):
             plt.show()
         # ------------- Plot -------------
 
+        # Cache the polylines so the lane-marker timer can republish them at a fixed rate,
+        # independent of the vis flag and without needing an rqt/lane_offset change.
+        self._center_xy = original_center_wpnts
+        self._outer_xy = outer_lane_resampled
+        self._inner_xy = inner_lane_resampled
+
+    def publish_start_end_markers(self, start_s, obs_start_u, obs_end_u, end_s):
+        """회피 구간의 핵심 s 포인트 4개를 큰 구 마커로 발행 (디버깅용).
+        path start(=차량, 청록), obstacle start(노랑), obstacle end(주황), path end(자홍).
+        모두 raceline(d=0) 위에 찍는다."""
+        pts_s = np.array([start_s, obs_start_u, obs_end_u, end_s]) % self.scaled_max_s
+        try:
+            resp = self.converter.get_cartesian(pts_s, np.zeros_like(pts_s))
+        except Exception:
+            return
+        resp = np.asarray(resp, dtype=float)
+        xy = resp.T if resp.shape[0] == 2 else resp
+        colors = [(0.0, 1.0, 1.0), (1.0, 1.0, 0.0), (1.0, 0.5, 0.0), (1.0, 0.0, 1.0)]
+        # Fixed 4 ids, always overwritten in place (no DELETEALL, no lifetime) so the spheres
+        # sit steady instead of flickering when this is called every frame. Cleared explicitly
+        # by clear_all_markers() when overtaking fully stops.
+        mrks = MarkerArray()
+        for i in range(min(len(xy), 4)):
+            mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"))
+            mrk.ns = "avoidance_start_end"
+            mrk.id = i
+            mrk.type = Marker.SPHERE
+            mrk.action = Marker.ADD
+            mrk.scale.x = mrk.scale.y = mrk.scale.z = 0.4
+            mrk.color.a = 0.9
+            mrk.color.r, mrk.color.g, mrk.color.b = colors[i]
+            mrk.pose.position.x = float(xy[i][0])
+            mrk.pose.position.y = float(xy[i][1])
+            mrk.pose.position.z = 0.2
+            mrk.pose.orientation.w = 1.0
+            mrks.markers.append(mrk)
+        self.avoidance_pts_pub.publish(mrks)
+
+    def lane_viz_loop(self):
+        """Fixed-rate republish of the cached lane markers and current offset."""
+        if self._center_xy is None:
+            return
+        self.publish_lane_markers(self._center_xy, self._outer_xy, self._inner_xy)
+        self.lane_offset_pub.publish(Float32MultiArray(data=[float(self.lane_offset), float(-self.lane_offset)]))
+
+    def publish_lane_markers(self, center_xy, outer_xy, inner_xy):
+        """Publish center / outer(left) / inner(right) lanes as colored line strips.
+        Center: white, outer/left: green, inner/right: red."""
+        mrks = MarkerArray()
+        specs = [
+            ("center", center_xy, (1.0, 1.0, 1.0)),
+            ("outer_left", outer_xy, (0.1, 0.9, 0.1)),
+            ("inner_right", inner_xy, (0.9, 0.1, 0.1)),
+        ]
+        for mid, (ns, xy, (r, g, b)) in enumerate(specs):
+            mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"))
+            mrk.ns = ns
+            mrk.id = mid
+            mrk.type = Marker.LINE_STRIP
+            mrk.action = Marker.ADD
+            mrk.scale.x = 0.03
+            mrk.color.a = 1.0
+            mrk.color.r, mrk.color.g, mrk.color.b = r, g, b
+            mrk.pose.orientation.w = 1.0
+            mrk.points = [Point(x=float(p[0]), y=float(p[1]), z=0.0) for p in xy]
+            mrks.markers.append(mrk)
+        self.lane_mrks_pub.publish(mrks)
+
+    def clear_all_markers(self):
+        """Send DELETEALL to every avoidance marker topic so nothing lingers in rviz when
+        we stop overtaking. Also publishes an empty evasion path to reset the merger side."""
+        for pub in (self.mrks_pub, self.spline_sample_pub, self.avoidance_pts_pub):
+            mrks = MarkerArray()
+            del_mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"))
+            del_mrk.action = Marker.DELETEALL
+            mrks.markers.append(del_mrk)
+            pub.publish(mrks)
+        self.evasion_pub.publish(
+            OTWpntArray(header=Header(stamp=self.get_clock().now().to_msg(), frame_id="map"), wpnts=[])
+        )
+
     ### Main Loop ###
     def loop(self):
         start_time = time.perf_counter()
@@ -771,21 +942,24 @@ class ChangeAvoidanceNode(Node):
         obs = deepcopy(self.obs_perception)
         considered_obs = self.obstacle_preprocessing(obs=obs)
 
-        # If there is an obstacle and we are in OT section
-        # if len(considered_obs) > 0 and self.ot_section_check == True:
-        if len(considered_obs) > 0:
+        # Overtake only with a fresh GP prediction. Perception-only overtaking is unstable, so
+        # without prediction we trail: publish no evasion path and clear stale markers.
+        evasion_ok = False
+        if len(considered_obs) > 0 and self.prediction_is_fresh():
             evasion_x, evasion_y, evasion_s, evasion_d, evasion_v = self.lane_change(considered_obs, self.current_s)
             # Publish merge reagion if evasion track has been found
             if len(evasion_s) > 0:
+                evasion_ok = True
                 self.merger_pub.publish(Float32MultiArray(data=[considered_obs[-1].s_end % self.scaled_max_s, evasion_s[-1] % self.scaled_max_s]))
-        # If there is no point in overtaking anymore delte all markers
+
+        # Debounce clearing: only wipe markers after several consecutive idle frames so a single
+        # failed frame does not flicker the markers off and back on.
+        if evasion_ok:
+            self.no_evasion_count = 0
         else:
-            mrks = MarkerArray()
-            del_mrk = Marker(header=Header(stamp=self.get_clock().now().to_msg()))
-            del_mrk.action = Marker.DELETEALL
-            mrks.markers = []
-            mrks.markers.append(del_mrk)
-            self.mrks_pub.publish(mrks)
+            self.no_evasion_count += 1
+            if self.no_evasion_count == self.clear_after_frames:
+                self.clear_all_markers()
 
         # publish latency
         if self.measure:

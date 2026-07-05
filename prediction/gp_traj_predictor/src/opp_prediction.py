@@ -58,7 +58,7 @@ class OppTrajPredictor(PredictionNode):
         # Simulation parameters
         self.time_steps = 200
         self.dt = 0.02 # s
-        self.save_distance_front = 3.0 # m
+        self.save_distance_front = 6.0 # m
         self.save_distance_back = 0.4 # m
         self.max_v = 10 # m/s
         self.min_v = 0 # m/s

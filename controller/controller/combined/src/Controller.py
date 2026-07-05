@@ -121,6 +121,7 @@ class Controller:
         self.i_gap = 0
         self.trailing_command = 2
         self.speed_command = None
+        self.last_valid_speed = 0
         self.curvature_waypoints = 0
         self.current_steer_command = 0
         self.yaw_rate = 0
@@ -191,16 +192,21 @@ class Controller:
 
         # POSTPROCESS for acceleration/speed decision
 
-        if self.speed_command is not None:
+        # Only advance the last-valid anchor on a finite command; np.isfinite
+        # keeps a NaN/inf speed (e.g. from an empty curvature slice when the car
+        # runs off a stale frozen local path) from reaching VESC/sim, which has
+        # no guard and would poison odom. Mirrors the steering safety net below.
+        if self.speed_command is not None and np.isfinite(self.speed_command):
             speed = max(self.speed_command, 0)
+            self.last_valid_speed = speed
             acceleration = 0
             jerk = 0
 
         else:
-            speed = 0
+            speed = self.last_valid_speed
             jerk = 0
             acceleration = 0
-            self.logger_warn("[Controller] speed was none")
+            self.logger_warn("[Controller] non-finite/none speed; holding last valid speed")
 
         ### LATERAL CONTROL ###
 
@@ -221,6 +227,18 @@ class Controller:
 
         else:
             raise Exception("L1_point is None")
+
+        # Final safety net: never emit a non-finite steering command. A NaN/inf
+        # here (e.g. from a degenerate local trajectory during overtaking) would
+        # otherwise propagate into calc_future_position next cycle and poison the
+        # controller permanently, and downstream (VESC / sim) has no guard. Hold
+        # the last valid steer instead so the node stays alive and recovers once
+        # clean waypoints return; current_steer_command is kept finite for the
+        # future-position feedback.
+        if not np.isfinite(steering_angle):
+            self.logger_warn("[Controller] non-finite steering; holding last valid steer")
+            steering_angle = self.curr_steering_angle
+            self.current_steer_command = steering_angle
 
         speed = self.AEB_for_weird_local_wpnt(speed)
 
@@ -284,11 +302,17 @@ class Controller:
 
         Future_L1_vector = np.array([future_L1_point[0] - self.future_position[0, 0], future_L1_point[1] - self.future_position[0, 1]])
 
-        if np.linalg.norm(Future_L1_vector) == 0:
-            self.logger_warn("[Controller] norm of L1 vector was 0, eta is set to 0")
+        L1_norm = np.linalg.norm(Future_L1_vector)
+        if L1_norm < 1e-6:
+            self.logger_warn("[Controller] norm of L1 vector was ~0, eta is set to 0")
             eta = 0
         else:
-            eta = np.arcsin(np.dot([-np.sin(yaw), np.cos(yaw)], Future_L1_vector)/np.linalg.norm(Future_L1_vector))
+            # clip to [-1, 1]: the ratio is analytically bounded but can exceed
+            # 1 by fp rounding (esp. on sharp evasion where L1 is ~normal to the
+            # heading), and arcsin(>1)=NaN would poison steering. Mirrors the
+            # guarded arcsin in calc_future_position.
+            sin_eta = np.dot([-np.sin(yaw), np.cos(yaw)], Future_L1_vector) / L1_norm
+            eta = np.arcsin(np.clip(sin_eta, -1.0, 1.0))
 
         # Pure-Pursuit steering (ROS1 MAP/steering-lookup branch removed)
         steering_angle = np.arctan(2*self.wheelbase*np.sin(eta)/L1_distance)
@@ -327,7 +351,11 @@ class Controller:
         steering_angle = np.clip(steering_angle, self.curr_steering_angle - threshold, self.curr_steering_angle + threshold)
         steering_angle = np.clip(steering_angle, -0.53, 0.53)
 
-        self.curr_steering_angle = steering_angle
+        # np.clip passes NaN through unchanged, so guard curr_steering_angle
+        # (the rate-limit/feedback anchor) against poisoning: only advance it on
+        # a finite result. main_loop's final net then falls back to this value.
+        if np.isfinite(steering_angle):
+            self.curr_steering_angle = steering_angle
 
         return steering_angle
 

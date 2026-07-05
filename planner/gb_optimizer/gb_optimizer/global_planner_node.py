@@ -66,6 +66,7 @@ class GlobalPlanner(Node):
         self.declare_parameter('map_dir', '')
         self.declare_parameter('reverse_mapping', False)
         self.declare_parameter('required_laps', 1)
+        self.declare_parameter('enable_mintime', False)
 
         self.racecar_version = self.get_parameter('racecar_version').value  # NUCX
 
@@ -77,6 +78,7 @@ class GlobalPlanner(Node):
 
         self.safety_width = self.get_parameter('safety_width').value
         self.safety_width_sp = self.get_parameter('safety_width_sp').value
+        self.enable_mintime = self.get_parameter('enable_mintime').value
         self.occupancy_grid_threshold = self.get_parameter('occupancy_grid_threshold').value
 
         self.show_plots = self.get_parameter('show_plots').value  # show no plots if False
@@ -586,10 +588,11 @@ class GlobalPlanner(Node):
         # publish the centerline markers
         self.vis_wpnt_cent_pub.publish(centerline_markers)
 
-        self.get_logger().info('[GB Planner]: Start Global Trajectory optimization with iterative minimum curvature...')
+        main_opt_type = 'mintime' if self.enable_mintime else 'mincurv_iqp'
+        self.get_logger().info(f'[GB Planner]: Start Global Trajectory optimization ({main_opt_type})...')
         global_trajectory_iqp, bound_r_iqp, bound_l_iqp, est_t_iqp = trajectory_optimizer(input_path=self.input_path,
                                                                                           track_name='map_centerline',
-                                                                                          curv_opt_type='mincurv_iqp',
+                                                                                          curv_opt_type=main_opt_type,
                                                                                           safety_width=self.safety_width,
                                                                                           plot=(self.show_plots and not self.map_editor))
 
@@ -942,26 +945,38 @@ class GlobalPlanner(Node):
         bound_short_meter[:, 0] = bound_short[:, 0] * self.map_resolution + self.map_origin.position.x
         bound_short_meter[:, 1] = bound_short[:, 1] * self.map_resolution + self.map_origin.position.y
 
-        # get distance to initial position for every point on the outer bound to figure out if it is the right
-        # or left boundary
-        bound_distance = np.sqrt(np.power(bound_long_meter[:, 0] - self.initial_position[0], 2)
-                                 + np.power(bound_long_meter[:, 1] - self.initial_position[1], 2))
+        # Decide which boundary is left/right purely from the (already direction-aligned) centerline
+        # geometry, NOT from the initial car pose or the OpenCV contour storage order (both were
+        # unreliable and flipped left/right on some maps). Convention: with the track traversed
+        # along the centerline direction, +d (frenet left) is the [-sin(psi), cos(psi)] normal, so a
+        # boundary point lying on the +normal side of its nearest centerline point is the LEFT bound.
+        cent_meter = np.zeros((centerline.shape[0], 2))
+        cent_meter[:, 0] = centerline[:, 0] * self.map_resolution + self.map_origin.position.x
+        cent_meter[:, 1] = centerline[:, 1] * self.map_resolution + self.map_origin.position.y
+        # centerline tangent (direction of travel) at each centerline point
+        cent_tangent = np.gradient(cent_meter, axis=0)
 
-        min_dist_ind = np.argmin(bound_distance)
+        def _mean_left_signed(bound_meter):
+            # for each boundary point, project (bound - nearest_cent) onto the left normal
+            signs = np.zeros(len(bound_meter))
+            for i, p in enumerate(bound_meter):
+                j = np.argmin((cent_meter[:, 0] - p[0]) ** 2 + (cent_meter[:, 1] - p[1]) ** 2)
+                tx, ty = cent_tangent[j]
+                n = math.hypot(tx, ty)
+                if n < 1e-9:
+                    continue
+                # left normal of travel direction = [-ty, tx] / |t|
+                nx, ny = -ty / n, tx / n
+                signs[i] = (p[0] - cent_meter[j, 0]) * nx + (p[1] - cent_meter[j, 1]) * ny
+            return np.mean(signs)
 
-        bound_direction = np.angle([complex(bound_long_meter[min_dist_ind, 0] - bound_long_meter[min_dist_ind - 1, 0],
-                                            bound_long_meter[min_dist_ind, 1] - bound_long_meter[min_dist_ind - 1, 1])])
-
-        norm_angle_right = self.initial_position[2] - math.pi
-        if norm_angle_right < -math.pi:
-            norm_angle_right = norm_angle_right + 2 * math.pi
-
-        if self.compare_direction(norm_angle_right, bound_direction):
+        # if bound_long sits on the +normal (left) side on average, it is the left boundary
+        if _mean_left_signed(bound_long_meter) > 0:
+            bound_left = bound_long_meter
+            bound_right = bound_short_meter
+        else:
             bound_right = bound_long_meter
             bound_left = bound_short_meter
-        else:
-            bound_right = bound_short_meter
-            bound_left = bound_long_meter
 
         # if self.show_plots and not self.map_editor:
         if self.show_plots:
@@ -1067,11 +1082,10 @@ class GlobalPlanner(Node):
             plt.legend()
 
             plt.show()
-        # Return flipped distances if map_editor reversing
-        if reverse:
-            return dists_left, dists_right
-        else:
-            return dists_right, dists_left
+        # NOTE: no reverse-swap here. Left/right is now decided in extract_track_bounds from the
+        # (already reverse-aware) centerline direction, so bound_r/bound_l passed in already carry
+        # the correct sides for both forward and reversed mapping. Swapping again would double-flip.
+        return dists_right, dists_left
 
     def add_dist_to_cent(self, centerline_smooth: np.ndarray,
                          centerline_meter: np.ndarray, dist_transform=None,

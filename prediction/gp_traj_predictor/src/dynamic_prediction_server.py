@@ -17,7 +17,7 @@ class DynamicPredictionTuner(Node):
         for name, default in {
             'n_time_steps': 200,
             'dt': 0.02,
-            'save_distance_front': 0.6,
+            'save_distance_front': 6.0,
             'max_expire_counter': 10,
             'update_waypoints': True,
                 'speed_offset': 0.0}.items():

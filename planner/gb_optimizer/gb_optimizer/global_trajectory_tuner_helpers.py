@@ -293,7 +293,7 @@ def sampleCubicSplinesWithDerivative(reference, data, resolution, target, scale)
     tangents=[]
     if target == "Pose":
         points.append(ref_back[0:2]) ; tangents.append(cal_unit_vec(ref_back[2]))
-        points.append(ref[0:2])           ; tangents.append(cal_unit_vec(data[reference[0]][2]))
+        points.append(ref[0:2])           ; tangents.append(cal_unit_vec(data[reference[0]%len(data)][2]))
         points.append(ref_forw[0:2]) ; tangents.append(cal_unit_vec(ref_forw[2]))
 
     elif target == "Vel":

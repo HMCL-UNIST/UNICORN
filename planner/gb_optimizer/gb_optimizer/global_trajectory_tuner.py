@@ -51,6 +51,12 @@ class GlobalTrajTuner(Node):
         self.glb_wpnts_pub = self.create_publisher(WpntArray, 'global_waypoints', 10)
         self.glb_markers_pub = self.create_publisher(MarkerArray, 'global_waypoints/markers', 10)
         self.update_map_pub = self.create_publisher(Bool, 'update_map', 10)
+        # Sector slicers need /trackbounds/markers too; global_planner would emit it,
+        # but here we republish the bounds read from the json so slicers can run standalone.
+        self.trackbounds_pub = self.create_publisher(MarkerArray, 'trackbounds/markers', 10)
+        # ot_sector_slicer also waits on /global_waypoints/shortest_path; republish the
+        # shortest-path wpnts read from the json so the overtaking slicer can run too.
+        self.glb_sp_wpnts_pub = self.create_publisher(WpntArray, 'global_waypoints/shortest_path', 10)
 
         self.server = InteractiveMarkerServer(self, "track_info_interactive")
         self.menu_handler = MenuHandler()
@@ -138,7 +144,6 @@ class GlobalTrajTuner(Node):
             global_marker.scale.z = global_wpnt.vx_mps / max_vx_mps
             global_marker.color.a = 1.0
             global_marker.color.r = 1.0
-            global_marker.color.g = 1.0
 
             global_marker.id = i
             global_marker.pose.position.x = global_wpnt.x_m
@@ -147,10 +152,34 @@ class GlobalTrajTuner(Node):
             global_marker.pose.orientation.w = 1.0
             global_markers.markers.append(global_marker)
 
+        # Re-close the loop: global_planner writes the first point again as the last
+        # (same x/y, s == loop length), and state_machine relies on that closing point
+        # (it drops wpnts[-1] assuming wpnts[-1] == wpnts[0]). interp_track strips it,
+        # so append it back or the local waypoints tear at the start/finish seam.
+        first = global_wpnts.wpnts[0]
+        wpnt_dist = global_wpnts.wpnts[1].s_m - global_wpnts.wpnts[0].s_m
+        closing = Wpnt()
+        closing.id = global_wpnts.wpnts[-1].id + 1
+        closing.s_m = global_wpnts.wpnts[-1].s_m + wpnt_dist
+        closing.d_m = first.d_m
+        closing.x_m = first.x_m
+        closing.y_m = first.y_m
+        closing.d_right = first.d_right
+        closing.d_left = first.d_left
+        closing.psi_rad = first.psi_rad
+        closing.kappa_radpm = first.kappa_radpm
+        closing.vx_mps = first.vx_mps
+        closing.ax_mps2 = first.ax_mps2
+        global_wpnts.wpnts.append(closing)
+
         self.glb_markers = global_markers
         self.glb_wpnts = global_wpnts
         self.glb_wpnts_pub.publish(global_wpnts)
         self.glb_markers_pub.publish(global_markers)
+        if self.track_bounds is not None:
+            self.trackbounds_pub.publish(self.track_bounds)
+        if self.glb_sp_wpnts is not None:
+            self.glb_sp_wpnts_pub.publish(self.glb_sp_wpnts)
 
     def save_global_traj(self):
         write_global_waypoints(
@@ -271,13 +300,17 @@ class GlobalTrajTuner(Node):
         # interpolate centerline to 0.1m stepsize: less computation needed later for distance to track bounds
         xy = np.column_stack((xy, np.zeros((xy.shape[0], 2))))
 
+        # interp_track returns an unclosed loop (path[-1] != path[0]) with a ~0.1m
+        # gap back to the start, so compute psi/kappa as CLOSED to keep the raceline
+        # continuous across the start/finish seam. Closed needs len(el_lengths)==len(path)
+        # (the extra element is the wrap-around last->first step).
         xy_int = helper_funcs_glob.src.interp_track.interp_track(reftrack=xy, stepsize_approx=0.1)[:, :2]
 
         psi, kappa = tph.calc_head_curv_num.\
             calc_head_curv_num(
                 path=xy_int,
-                el_lengths=0.1*np.ones(len(xy_int)-1),
-                is_closed=False
+                el_lengths=0.1*np.ones(len(xy_int)),
+                is_closed=True
             )
 
         # build KDTree for nearest-neighbour search
@@ -304,6 +337,15 @@ class GlobalTrajTuner(Node):
             new_wpnts_data.append(wpnt_data)
         # Convert the list to a numpy array
         self.wpnts_data = np.array(new_wpnts_data)
+
+    def refresh_geometry(self):
+        """
+        Recompute all XY-derived fields after any position edit, in the order the
+        data depends on: psi/kappa first (this reinterpolates and zeroes d), then
+        d_right/d_left against the (fixed, absolute) track bounds.
+        """
+        self.update_psi_kappa()
+        self.update_d()
 
     def process_feedback(self, feedback: InteractiveMarkerFeedback):
         """
@@ -334,7 +376,7 @@ class GlobalTrajTuner(Node):
                 elif selected_menu == "Pos_Straighten":
                     self.push_back_waypoints()
                     self.wpnts_data[:, 3:5] = straighten_2d(self.anchor1, self.anchor2, self.wpnts_data[:, 3:5])
-                    self.update_yaw()
+                    self.refresh_geometry()
                     self.initialize_interactive_markers(self.wpnts_data)
                     self.get_logger().warn("Finish straightening position in xy-plane!!")
                 elif selected_menu == "Vel_Set":
@@ -362,16 +404,19 @@ class GlobalTrajTuner(Node):
                     position = self.server.get(m_name).pose.position
                     reference = [int(m_name), position.x, position.y, position.z]
                     self.wpnts_data[:, 3:5] = entire_traj_translation(reference, self.wpnts_data[:, 3:5])
+                    self.refresh_geometry()
                     self.initialize_interactive_markers(self.wpnts_data)
                 elif selected_menu == "entire_rotation":
                     self.push_back_waypoints()
                     self.wpnts_data[:, 3:5] = entire_traj_rotation(self.anchor1, self.anchor2, self.wpnts_data[:, 3:5])
-                    self.update_yaw()
+                    self.refresh_geometry()
                     self.initialize_interactive_markers(self.wpnts_data)
                 elif selected_menu == "Update":
+                    self.refresh_geometry()
                     self.publish_global_traj()
                     self.publish_update_map()
                 elif selected_menu == "Save":
+                    self.refresh_geometry()
                     self.publish_global_traj()
                     self.save_global_traj()
                 else:
@@ -395,8 +440,7 @@ class GlobalTrajTuner(Node):
                     updated_xy_yaw = sampleCubicSplinesWithDerivative(reference, xy_yaw, c[b], "Pose", 1.0)
                     self.wpnts_data[:, 3:5] = updated_xy_yaw[:, 0:2]
                     self.wpnts_data[:, 7] = updated_xy_yaw[:, 2]
-                    self.update_psi_kappa()
-                    self.update_d()
+                    self.refresh_geometry()
 
                     self.get_logger().warn(f"Pose spline {c[b]}!!")
                 elif a == 1:
@@ -471,6 +515,10 @@ class GlobalTrajTuner(Node):
             self.get_logger().warn("No waypoints data available to add interactive markers.")
             return
 
+        # Wipe stale markers first: edits re-interpolate to a different count, so
+        # inserting without clearing leaves orphaned markers from the old (longer) set.
+        self.server.clear()
+
         for idx, wpnt in enumerate(waypoints_data):
             # Extract waypoint data
             x, y, vx_mps = wpnt[3], wpnt[4], wpnt[9]
@@ -509,6 +557,29 @@ class GlobalTrajTuner(Node):
             if idx % self.sampling_step == 0:
                 int_marker.description = f"v : {vx_mps:.2f}"
                 self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_z", 1., 0., 1., 0.)
+                # Per-axis arrows: X/Y like the vel z-axis arrow
+                self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_x", 1., 1., 0., 0.)
+                self.create_marker_control(int_marker, InteractiveMarkerControl.MOVE_AXIS, "move_y", 1., 0., 0., 1.)
+                # Free XY-plane drag (normal = z axis) with a small dedicated handle
+                xy_control = InteractiveMarkerControl()
+                xy_control.always_visible = True
+                xy_control.name = "move_xy"
+                xy_control.orientation.w = 1.
+                xy_control.orientation.x = 0.
+                xy_control.orientation.y = 1.
+                xy_control.orientation.z = 0.
+                xy_control.interaction_mode = InteractiveMarkerControl.MOVE_PLANE
+                xy_handle = Marker()
+                xy_handle.type = Marker.SPHERE
+                xy_handle.scale.x = 0.18
+                xy_handle.scale.y = 0.18
+                xy_handle.scale.z = 0.06
+                xy_handle.color.r = 0.0
+                xy_handle.color.g = 0.0
+                xy_handle.color.b = 1.0
+                xy_handle.color.a = 0.9
+                xy_control.markers.append(xy_handle)
+                int_marker.controls.append(xy_control)
 
             # Insert the marker into the server
             self.server.insert(int_marker, feedback_callback=self.process_feedback)

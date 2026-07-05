@@ -27,6 +27,8 @@
        description="WpntArray the controller follows: /local_waypoints (state-machine output w/ avoidance) or /global_waypoints (robust raceline)"/>
   <arg name="vis_lane_change" default="false"
        description="Show lane_change_planner's matplotlib lane-visualization window at startup (blocks on plt.show()); off by default"/>
+  <arg name="dynamic_avoidance_mode" default="Change"
+       description="Dynamic (overtake) planner to run: Change (lane_change_planner) or SQP (sqp_planner). Both publish /planner/avoidance/otwpnts + /planner/avoidance/merger and their own update_waypoints, so they are drop-in swappable."/>
   <!-- sim -> SIM config (racecar_f110.ini + veh_dyn_info); real hardware -> CAR. Folder name == racecar_version. -->
   <let name="racecar_version" value="SIM" if="$(var sim)"/>
   <let name="racecar_version" value="CAR" unless="$(var sim)"/>
@@ -83,11 +85,19 @@
     <remap from="/planner/avoidance/otwpnts" to="/planner/avoidance/static_otwpnts"/>
   </node>
 
-  <!-- Dynamic avoidance (ROS1 Change mode) -> /planner/avoidance/otwpnts + /planner/avoidance/merger -->
-  <node pkg="lane_change_planner" exec="change_avoidance_node" name="planner_change" output="screen">
-    <param name="vis" value="$(var vis_lane_change)"/>
-  </node>
-  <node pkg="lane_change_planner" exec="update_waypoints" name="waypoint_updater" output="screen"/>
+  <!-- Dynamic avoidance planner (selected by dynamic_avoidance_mode) -> /planner/avoidance/otwpnts + /planner/avoidance/merger + /global_waypoints_updated -->
+  <!-- Change mode (ROS1 default): lane_change_planner -->
+  <group if="$(eval '\'$(var dynamic_avoidance_mode)\' == \'Change\'')">
+    <node pkg="lane_change_planner" exec="change_avoidance_node" name="planner_change" output="screen">
+      <param name="vis" value="$(var vis_lane_change)"/>
+    </node>
+    <node pkg="lane_change_planner" exec="update_waypoints" name="waypoint_updater" output="screen"/>
+  </group>
+  <!-- SQP mode: sqp_planner -->
+  <group if="$(eval '\'$(var dynamic_avoidance_mode)\' == \'SQP\'')">
+    <node pkg="sqp_planner" exec="sqp_avoidance_node" name="planner_sqp" output="screen"/>
+    <node pkg="sqp_planner" exec="update_waypoints" name="waypoint_updater" output="screen"/>
+  </group>
 
   <!-- ===== GP opponent-trajectory predictor =====
        Pipeline (README): opponent_trajectory (collect /proj_opponent_trajectory) ->

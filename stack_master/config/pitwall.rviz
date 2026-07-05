@@ -6,7 +6,6 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
-        - /PERCEPTION1/Tracked obstacles (static/dynamic)1
       Splitter Ratio: 0.5
     Tree Height: 322
   - Class: rviz_common/Selection
@@ -126,9 +125,9 @@ Visualization Manager:
               Enabled: true
               Invert Rainbow: false
               Max Color: 255; 255; 255
-              Max Intensity: 8.244219779968262
+              Max Intensity: 7.994852542877197
               Min Color: 0; 0; 0
-              Min Intensity: 1.8863071203231812
+              Min Intensity: 1.513189435005188
               Name: Ego Scan
               Position Transformer: XYZ
               Selectable: true
@@ -393,7 +392,6 @@ Visualization Manager:
           Name: Virtual objects (opp + static)
           Namespaces:
             opp_box: true
-            static_obs: true
           Topic:
             Depth: 5
             Durability Policy: Volatile
@@ -647,42 +645,76 @@ Visualization Manager:
           Name: Prediction
         - Class: rviz_common/Group
           Displays:
-            - Class: rviz_default_plugins/MarkerArray
+            - Class: rviz_common/Group
+              Displays:
+                - Class: rviz_default_plugins/MarkerArray
+                  Enabled: false
+                  Name: Static Avoidance path
+                  Namespaces:
+                    {}
+                  Topic:
+                    Depth: 5
+                    Durability Policy: Volatile
+                    History Policy: Keep Last
+                    Reliability Policy: Reliable
+                    Value: /planner/avoidance/markers
+                  Value: false
+                - Class: rviz_default_plugins/MarkerArray
+                  Enabled: false
+                  Name: Spline samples
+                  Namespaces:
+                    {}
+                  Topic:
+                    Depth: 5
+                    Durability Policy: Volatile
+                    History Policy: Keep Last
+                    Reliability Policy: Reliable
+                    Value: /planner/avoidance/spline_samples
+                  Value: false
               Enabled: true
-              Name: Static Avoidance path
-              Namespaces:
-                "": true
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/avoidance/markers
-              Value: true
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: Dynamic Avoidance (SQP / predictive)
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/avoidance/markers_sqp
-              Value: false
-            - Class: rviz_default_plugins/MarkerArray
-              Enabled: false
-              Name: Spline samples
-              Namespaces:
-                {}
-              Topic:
-                Depth: 5
-                Durability Policy: Volatile
-                History Policy: Keep Last
-                Reliability Policy: Reliable
-                Value: /planner/avoidance/spline_samples
-              Value: false
+              Name: Static
+            - Class: rviz_common/Group
+              Displays:
+                - Class: rviz_default_plugins/MarkerArray
+                  Enabled: true
+                  Name: Dynamic Avoidance (SQP / predictive)
+                  Namespaces:
+                    "": true
+                  Topic:
+                    Depth: 5
+                    Durability Policy: Volatile
+                    History Policy: Keep Last
+                    Reliability Policy: Reliable
+                    Value: /planner/avoidance/markers_sqp
+                  Value: true
+                - Class: rviz_default_plugins/MarkerArray
+                  Enabled: true
+                  Name: Lane change start end
+                  Namespaces:
+                    avoidance_start_end: true
+                  Topic:
+                    Depth: 5
+                    Durability Policy: Volatile
+                    History Policy: Keep Last
+                    Reliability Policy: Reliable
+                    Value: /planner/avoidance/start_end_markers
+                  Value: true
+                - Class: rviz_default_plugins/MarkerArray
+                  Enabled: true
+                  Name: Lane
+                  Namespaces:
+                    center: true
+                    inner_right: true
+                    outer_left: true
+                  Topic:
+                    Depth: 5
+                    Durability Policy: Volatile
+                    History Policy: Keep Last
+                    Reliability Policy: Reliable
+                    Value: /planner/avoidance/lane_markers
+                  Value: true
+              Enabled: true
+              Name: Dynamic
           Enabled: true
           Name: Avoidance / Overtaking
         - Class: rviz_common/Group
@@ -881,11 +913,11 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Scale: 27.66545295715332
+      Scale: 34.13398361206055
       Target Frame: <Fixed Frame>
       Value: TopDownOrtho (rviz_default_plugins)
-      X: 10.577850341796875
-      Y: 7.271151542663574
+      X: 12.478878021240234
+      Y: 8.536393165588379
     Saved: ~
 Window Geometry:
   Displays:
@@ -901,7 +933,7 @@ Window Geometry:
   Views:
     collapsed: false
   Width: 1920
-  X: 0
-  Y: 0
+  X: 3000
+  Y: 492
   pitwall:
     collapsed: false

@@ -188,8 +188,11 @@ def opt_mintime(reftrack: np.ndarray,
         nx_pwr = 0
 
     # velocity [m/s]
+    # F1TENTH: scale factors below are tied to ini limits so normalized vars stay
+    # ~O(1). The upstream defaults (v_s=50, f_drive_s=7500, ...) are full-size race
+    # car values and drive IPOPT to diverge at F1Tenth magnitudes.
     v_n = ca.SX.sym('v_n')
-    v_s = 50
+    v_s = pars["veh_params"]["v_max"]
     v = v_s * v_n
 
     # side slip angle [rad]
@@ -204,7 +207,7 @@ def opt_mintime(reftrack: np.ndarray,
 
     # lateral distance to reference line (positive = left) [m]
     n_n = ca.SX.sym('n_n')
-    n_s = 5.0
+    n_s = 1.0  # F1TENTH: track half-width ~1 m (was 5.0)
     n = n_s * n_n
 
     # relative angle to tangent on reference line [rad]
@@ -258,17 +261,18 @@ def opt_mintime(reftrack: np.ndarray,
 
     # positive longitudinal force (drive) [N]
     f_drive_n = ca.SX.sym('f_drive_n')
-    f_drive_s = 7500.0
+    f_drive_s = pars["vehicle_params_mintime"]["f_drive_max"]  # F1TENTH (was 7500)
     f_drive = f_drive_s * f_drive_n
 
     # negative longitudinal force (brake) [N]
     f_brake_n = ca.SX.sym('f_brake_n')
-    f_brake_s = 20000.0
+    f_brake_s = pars["vehicle_params_mintime"]["f_brake_max"]  # F1TENTH (was 20000)
     f_brake = f_brake_s * f_brake_n
 
     # lateral wheel load transfer [N]
+    # ~ static axle load m*g; keeps gamma_y_n ~O(1) at F1Tenth mass (was 5000)
     gamma_y_n = ca.SX.sym('gamma_y_n')
-    gamma_y_s = 5000.0
+    gamma_y_s = pars["veh_params"]["mass"] * pars["veh_params"]["g"]
     gamma_y = gamma_y_s * gamma_y_n
 
     # scaling factors for control variables
@@ -504,7 +508,9 @@ def opt_mintime(reftrack: np.ndarray,
     # ------------------------------------------------------------------------------------------------------------------
     # INITIAL GUESS FOR DECISION VARIABLES -----------------------------------------------------------------------------
     # ------------------------------------------------------------------------------------------------------------------
-    v_guess = 20.0 / v_s
+    # F1TENTH: initial guess must stay below v_max (upstream 20 m/s exceeds it,
+    # putting every node past the speed bound from the first iterate)
+    v_guess = (0.5 * pars["veh_params"]["v_max"]) / v_s
 
     # ------------------------------------------------------------------------------------------------------------------
     # HELPER FUNCTIONS -------------------------------------------------------------------------------------------------
@@ -563,8 +569,10 @@ def opt_mintime(reftrack: np.ndarray,
     # boundary constraint: lift initial conditions
     Xk = ca.MX.sym('X0', nx)
     w.append(Xk)
-    n_min = (-w_tr_right_interp(0) + pars["optim_opts"]["width_opt"] / 2) / n_s
-    n_max = (w_tr_left_interp(0) - pars["optim_opts"]["width_opt"] / 2) / n_s
+    # float() unwraps the CasADi DM scalar returned by the interpolant; numpy>=2
+    # rejects DM elements inside the ragged lbw/ubw lists at np.concatenate time
+    n_min = float((-w_tr_right_interp(0) + pars["optim_opts"]["width_opt"] / 2) / n_s)
+    n_max = float((w_tr_left_interp(0) - pars["optim_opts"]["width_opt"] / 2) / n_s)
     if pars["pwr_params_mintime"]["pwr_behavior"]:
         lbw.append([v_min, beta_min, omega_z_min, n_min, xi_min,
                     machine.temp_min, batt.temp_min, inverter.temp_min,
@@ -676,8 +684,8 @@ def opt_mintime(reftrack: np.ndarray,
         # add new decision variables for state at end of the collocation interval
         Xk = ca.MX.sym('X_' + str(k + 1), nx)
         w.append(Xk)
-        n_min = (-w_tr_right_interp(k + 1) + pars["optim_opts"]["width_opt"] / 2.0) / n_s
-        n_max = (w_tr_left_interp(k + 1) - pars["optim_opts"]["width_opt"] / 2.0) / n_s
+        n_min = float((-w_tr_right_interp(k + 1) + pars["optim_opts"]["width_opt"] / 2.0) / n_s)
+        n_max = float((w_tr_left_interp(k + 1) - pars["optim_opts"]["width_opt"] / 2.0) / n_s)
         if pars["pwr_params_mintime"]["pwr_behavior"]:
             lbw.append([v_min, beta_min, omega_z_min, n_min, xi_min,
                         machine.temp_min, batt.temp_min, inverter.temp_min,

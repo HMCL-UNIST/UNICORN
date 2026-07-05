@@ -2,40 +2,16 @@ speed_sector_tuner:
   ros__parameters:
     save_params: false
     global_limit: 1.0
-    n_sectors: 6
+    n_sectors: 2
     Sector0:
       start: 0
-      end: 100
+      end: 348
       scaling: 1.0
       only_FTG: false
       no_FTG: false
     Sector1:
-      start: 101
-      end: 271
-      scaling: 1.0
-      only_FTG: false
-      no_FTG: false
-    Sector2:
-      start: 272
-      end: 411
-      scaling: 1.0
-      only_FTG: false
-      no_FTG: false
-    Sector3:
-      start: 412
-      end: 538
-      scaling: 1.0
-      only_FTG: false
-      no_FTG: false
-    Sector4:
-      start: 539
-      end: 644
-      scaling: 1.0
-      only_FTG: false
-      no_FTG: false
-    Sector5:
-      start: 645
-      end: 773
+      start: 349
+      end: 778
       scaling: 1.0
       only_FTG: false
       no_FTG: false
