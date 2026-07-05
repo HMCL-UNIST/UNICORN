@@ -58,7 +58,7 @@
     <node pkg="cartographer_ros" exec="cartographer_node" name="cartographer_node" output="screen"
           args="-configuration_directory $(var cartographer_config_dir) -configuration_basename $(var lua_file) -load_state_filename $(var pbstream_file)">
       <param name="use_sim_time" value="false"/>
-      <remap from="/imu" to="/vesc/sensors/imu/raw"/>
+      <remap from="/imu" to="/vesc/sensors/imu"/>
       <remap from="/odom" to="/vesc/odom"/>
     </node>
 

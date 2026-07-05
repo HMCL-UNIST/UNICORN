@@ -32,6 +32,7 @@
 
 #include <cmath>
 #include <string>
+#include <vector>
 
 #include <geometry_msgs/msg/transform_stamped.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
@@ -89,6 +90,31 @@ VescToOdom::VescToOdom(const rclcpp::NodeOptions & options)
     servo_sub_ = create_subscription<Float64>(
       "sensors/servo_position_command", 10, std::bind(&VescToOdom::servoCmdCallback, this, _1));
   }
+
+  // apply gain/offset changes at runtime (ros2 param set, or the vesc_calibration
+  // node's apply), so the odom conversion tracks a retuned mapping without restart.
+  param_cb_handle_ = add_on_set_parameters_callback(
+    std::bind(&VescToOdom::onSetParameters, this, _1));
+}
+
+rcl_interfaces::msg::SetParametersResult VescToOdom::onSetParameters(
+  const std::vector<rclcpp::Parameter> & params)
+{
+  for (const auto & p : params) {
+    const auto & name = p.get_name();
+    if (name == "speed_to_erpm_gain") {
+      speed_to_erpm_gain_ = p.as_double();
+    } else if (name == "speed_to_erpm_offset") {
+      speed_to_erpm_offset_ = p.as_double();
+    } else if (name == "steering_angle_to_servo_gain") {
+      steering_to_servo_gain_ = p.as_double();
+    } else if (name == "steering_angle_to_servo_offset") {
+      steering_to_servo_offset_ = p.as_double();
+    }
+  }
+  rcl_interfaces::msg::SetParametersResult result;
+  result.successful = true;
+  return result;
 }
 
 void VescToOdom::vescStateCallback(const VescStateStamped::SharedPtr state)

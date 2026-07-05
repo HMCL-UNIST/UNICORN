@@ -55,7 +55,7 @@ sleep 4   # let nodes + recorder come up
 # 4) play only the standard-typed topics the EKF/compare need; publish /clock
 echo "playing bag ..."
 ros2 bag play "$BAG" --clock 200 \
-   --topics /vesc/odom /vesc/sensors/imu/raw /tracked_pose >"$LOG/play.log" 2>&1
+   --topics /vesc/odom /vesc/sensors/imu /tracked_pose >"$LOG/play.log" 2>&1
 echo "play done"
 
 sleep 2

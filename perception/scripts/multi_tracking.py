@@ -299,6 +299,7 @@ class StaticDynamic(Node):
         # --- Variables ---
         self.meas_obstacles = []
         self.tracked_obstacles = []
+        self._prev_marker_ids = set()  # ids drawn last frame, to DELETE dropped tracks
         self.waypoints = None
         self.car_s = None
         self.car_position = None
@@ -779,15 +780,11 @@ class StaticDynamic(Node):
             ))
             self.current_id += 1
 
-    def clearmarkers(self):
-        marker = Marker()
-        marker.header.frame_id = "map"  # set so the DELETEALL marker isn't dropped by RViz (empty frame)
-        marker.action = 3
-        markers = MarkerArray()
-        markers.markers = [marker]
-        return markers
-
     def publish_Marker(self):
+        # A dropped track simply stops being republished; neither lifetime nor a
+        # DELETEALL reliably clears its last ADD from RViz (it lingers until the
+        # display is toggled). So we diff against last frame and send an explicit
+        # DELETE for every id we drew before but no longer draw.
         markers_array = []
         for tracked_obstacle in self.tracked_obstacles:
             marker = Marker()
@@ -850,7 +847,15 @@ class StaticDynamic(Node):
             elif tracked_obstacle.staticFlag and self.publish_static:
                 markers_array.append(marker)
 
-        self.static_dynamic_marker_pub.publish(self.clearmarkers())
+        # ids we actually drew this frame (every appended marker is an ADD with .id set)
+        current_ids = {m.id for m in markers_array}
+        for old_id in self._prev_marker_ids - current_ids:
+            del_marker = Marker()
+            del_marker.id = int(old_id)
+            del_marker.action = Marker.DELETE
+            markers_array.append(del_marker)
+        self._prev_marker_ids = current_ids
+
         markers = MarkerArray()
         markers.markers = markers_array
         self.static_dynamic_marker_pub.publish(markers)

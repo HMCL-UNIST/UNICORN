@@ -51,6 +51,7 @@ bool GridFilter::loadMapFromYAML(const std::string& yamlPath, const std::string&
 
 // Set erosion kernel size and recompute contours
 void GridFilter::setErosionKernelSize(int pix) {
+    if (pix < 1) pix = 1;  // guard: 0/negative -> empty kernel -> cv::erode aborts (normalizeAnchor)
     kernelSize = cv::Size(pix, pix);
     kernel = cv::getStructuringElement(cv::MORPH_RECT, kernelSize);
     updateImage();

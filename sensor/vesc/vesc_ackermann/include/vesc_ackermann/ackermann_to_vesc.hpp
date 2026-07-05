@@ -31,7 +31,10 @@
 #ifndef VESC_ACKERMANN__ACKERMANN_TO_VESC_HPP_
 #define VESC_ACKERMANN__ACKERMANN_TO_VESC_HPP_
 
+#include <vector>
+
 #include <ackermann_msgs/msg/ackermann_drive_stamped.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 
@@ -61,6 +64,12 @@ private:
 
   // ROS callbacks
   void ackermannCmdCallback(const AckermannDriveStamped::SharedPtr cmd);
+
+  // Dynamic reconfigure: apply gain/offset changes live (ros2 param set /
+  // vesc_calibration), so retuning the VESC mapping doesn't need a node restart.
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter> & params);
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
 };
 
 }  // namespace vesc_ackermann

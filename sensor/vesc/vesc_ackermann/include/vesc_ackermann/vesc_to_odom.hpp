@@ -35,8 +35,10 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include <nav_msgs/msg/odometry.hpp>
+#include <rcl_interfaces/msg/set_parameters_result.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <std_msgs/msg/float64.hpp>
 #include <vesc_msgs/msg/vesc_state_stamped.hpp>
@@ -79,6 +81,13 @@ private:
   // ROS callbacks
   void vescStateCallback(const VescStateStamped::SharedPtr state);
   void servoCmdCallback(const Float64::SharedPtr servo);
+
+  // Dynamic reconfigure: apply gain/offset changes live (ros2 param set /
+  // vesc_calibration), so the odom conversion tracks a retuned VESC mapping
+  // without a node restart.
+  rcl_interfaces::msg::SetParametersResult onSetParameters(
+    const std::vector<rclcpp::Parameter> & params);
+  rclcpp::node_interfaces::OnSetParametersCallbackHandle::SharedPtr param_cb_handle_;
 };
 
 }  // namespace vesc_ackermann

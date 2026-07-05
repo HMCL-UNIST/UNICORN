@@ -32,6 +32,9 @@ from std_msgs.msg import Float32MultiArray, Float32, Header, Bool
 from frenet_conversion.frenet_converter import FrenetConverter
 
 from ccma import CCMA
+# NumPy 2.0 removed the np.row_stack alias, but the ccma library still calls it.
+if not hasattr(np, "row_stack"):
+    np.row_stack = np.vstack
 import trajectory_planning_helpers as tph
 from grid_filter.grid_filter import GridFilter
 import matplotlib.pyplot as plt
