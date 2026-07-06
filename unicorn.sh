@@ -104,7 +104,7 @@ ros2kill() {
 
 # Open the pitwall RViz (Sim Control + telemetry panel). More tools may join
 # this launch later. Pass-through args go to ros2 launch.
-alias pitwall='ros2 launch pitwall pitwall.launch.py'
+alias pitwall='ros2 launch stack_master pitwall.launch.xml'
 
 # Live cartographer matching-health monitor (frozen-map constraints, match
 # scores, matcher/backend queues). Needs cartographer_node -collect_metrics.
