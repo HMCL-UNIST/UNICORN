@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>odom_calib</name>
+  <version>0.0.1</version>
+  <description>
+    VESC odometry gain identification. Offline: analyze a rosbag2 (.mcap) against
+    cartographer ground truth (run.py / analyze_bag.sh, no ROS needed). Online:
+    a PASSIVE tuner node that estimates speed_to_erpm_gain and
+    steering_angle_to_servo_gain/offset live while a human drives, streaming them
+    to pitwall every ~1.5 s. Both share the same IRLS estimator.
+  </description>
+  <maintainer email="kwonc@unist.ac.kr">js</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>vesc_msgs</exec_depend>
+  <exec_depend>pitwall</exec_depend>
+  <exec_depend>python3-numpy</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

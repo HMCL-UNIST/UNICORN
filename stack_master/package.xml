@@ -23,6 +23,7 @@
 
   <exec_depend>controller</exec_depend>
   <exec_depend>pitwall</exec_depend>
+  <exec_depend>odom_calib</exec_depend>
   <exec_depend>vesc_driver</exec_depend>
   <exec_depend>urg_node</exec_depend>
   <exec_depend>tf2_ros</exec_depend>

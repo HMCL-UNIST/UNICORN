@@ -3,6 +3,16 @@
   vesc_calibration.launch.xml — fit the VESC speed/steering mapping from external
   odometry, with live telemetry to pitwall and optional rqt manual drive.
 
+  TWO MODES:
+    online:=true  (DEFAULT) — PASSIVE tuner from odom_calib. Just drive the car
+      by HAND; it estimates speed_to_erpm_gain and steering_angle_to_servo_gain/
+      offset over a trailing window and streams all three to /pitwall/online_calib/
+      * every ~1.5 s. It never commands the car. TURN the car to get a steering
+      fit (straight-line driving carries no steering information).
+    autodrive:=true (opt-in) — the ACTIVE point-by-point calibrator below
+      (stack_master vesc_calibration_node) that drives ONE (cmd_speed,cmd_steer)
+      point per joystick autodrive press. Off by default now.
+
   This brings up the localization stack itself (sensors + simple_mux + the chosen
   localizer publishing /car_state/odom) and then the calibrator on top:
 
@@ -38,6 +48,8 @@
   <arg name="use_localization" default="true" description="Bring up the localization stack here (false = already running)"/>
   <arg name="vehicle_config" default="$(find-pkg-share stack_master)/config/CAR/vehicle_config.yaml"/>
   <arg name="rqt"            default="false" description="Open rqt_reconfigure locally instead (default off; SSH-friendly)"/>
+  <arg name="online"         default="true"  description="Online PASSIVE tuner (odom_calib): live gain estimates to pitwall while a human drives"/>
+  <arg name="autodrive"      default="false" description="Also run the ACTIVE point calibrator (stack_master vesc_calibration_node); off by default"/>
 
   <!-- Localization stack: sensors + simple_mux (emergency joy) + localizer -> /car_state/odom -->
   <include file="$(find-pkg-share stack_master)/launch/localization.launch.xml"
@@ -49,7 +61,21 @@
     <arg name="keyboard_teleop" value="false"/>
   </include>
 
-  <node pkg="stack_master" exec="vesc_calibration_node.py" name="vesc_calibration" output="screen">
+  <!-- ONLINE passive tuner (DEFAULT): estimates the 3 VESC gains live WHILE YOU
+       DRIVE BY HAND. Never commands the car. Publishes speed_to_erpm_gain,
+       steering_angle_to_servo_gain and steering_angle_to_servo_offset on
+       /pitwall/online_calib/* every ~1.5 s. Turn the car to get a steering fit. -->
+  <node pkg="odom_calib" exec="online_vesc_tuner" name="online_vesc_tuner"
+        if="$(var online)" output="screen">
+    <!-- wheelbase (and any /** defaults) come from the vehicle config -->
+    <param from="$(var vehicle_config)"/>
+    <param name="odom_topic" value="/car_state/odom"/>
+  </node>
+
+  <!-- ACTIVE point calibrator (opt-in via autodrive:=true): drives ONE
+       (cmd_speed,cmd_steer) point per joystick autodrive press. -->
+  <node pkg="stack_master" exec="vesc_calibration_node.py" name="vesc_calibration"
+        if="$(var autodrive)" output="screen">
     <!-- wheelbase (and any /** defaults) come from the vehicle config -->
     <param from="$(var vehicle_config)"/>
     <!-- No mode: the node classifies each command point by its steering value.
