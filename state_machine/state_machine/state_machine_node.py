@@ -290,6 +290,13 @@ class StateMachine(Node):
         self.overtaking_ttl_sec = self.params.overtaking_ttl_sec
         self.overtaking_ttl_count = 0
         self.overtaking_ttl_count_threshold = int(self.overtaking_ttl_sec * self.rate_hz)
+        # Grace window (in loops) during which the OT-blended recovery path is allowed
+        # as the recovery source. The blended path (OT heading -> GB) only makes sense
+        # when leaving OVERTAKE; outside that window plain recovery is used, so a car
+        # that never overtook (OT sector off) never trails on the blended OT line.
+        # Set to a positive count while in OVERTAKE and decremented each loop after.
+        self.blended_recovery_grace_loops = int(0.5 * self.rate_hz)
+        self._blended_grace_count = 0
 
         self.save_start_traj = False
         self.cur_start_wpnts_candidate = OTWpntArray()
@@ -609,8 +616,14 @@ class StateMachine(Node):
         # from under it -- the freeze in _check_latest_wpnts keeps the captured cache.
         if self.cur_recovery_wpnts.frozen:
             return
+        # The blended path is only meaningful when leaving OVERTAKE: it keeps the OT
+        # heading for ~1 m then splines back to GB. Outside the post-OVERTAKE grace
+        # window it must NOT stand in as the recovery source, otherwise a car that is
+        # merely trailing (OT sector off, OVERTAKE never entered) would follow the OT
+        # line whenever it drifts off the raceline. Fall back to plain recovery then.
+        allow_blended = self.cur_state == StateType.OVERTAKE or self._blended_grace_count > 0
         blended = self._recovery_blended
-        if blended is not None and len(blended.wpnts) != 0 and (
+        if allow_blended and blended is not None and len(blended.wpnts) != 0 and (
             self.now_sec() - time_to_float(blended.header.stamp)
         ) <= self.cur_recovery_wpnts.latest_threshold:
             self.recovery_wpnts = blended
@@ -1626,6 +1639,15 @@ class StateMachine(Node):
         # and hold that single path until we leave RECOVERY, so the controller target
         # stops jumping as recovery_spliner re-anchors the blended path every frame.
         self._hold_recovery_freeze()
+
+        # Post-OVERTAKE grace: keep the blended-recovery source eligible for a short
+        # window after leaving OVERTAKE (see _select_recovery_source), so the OT->GB
+        # blend can smooth the return instead of snapping to GB the instant OVERTAKE
+        # ends. Refresh while overtaking, decrement once we are out.
+        if self.cur_state == StateType.OVERTAKE:
+            self._blended_grace_count = self.blended_recovery_grace_loops
+        elif self._blended_grace_count > 0:
+            self._blended_grace_count -= 1
 
         local_wpnts = self.states[self.local_wpnts_src](self)
 
