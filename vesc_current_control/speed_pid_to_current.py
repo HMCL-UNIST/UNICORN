@@ -14,10 +14,15 @@ ROS-단 속도 PID → 전류 변환 노드.
     speed_sign 기본 -1.0 → vesc_to_odom.cpp 의 `-state->state.speed` 와 부호 일치.
   - 감속: current_min 을 음수로 두어 음전류(회생제동) 허용 (사용자 결정).
   - PID 는 control_rate[Hz] 타이머로 고정 주기 실행 (cmd/feedback 콜백 rate 와 디커플).
-  - anti-windup: 적분항 clamp + 출력 포화 시 back-calculation.
+  - feedforward: 목표속도 기반(planner 가속도 불필요). vel_ff_gain·static_ff(항력/정지마찰
+    상쇄) + accel_ff_gain(목표속도 미분, opt-in) → 스텝 응답 snappy, 적분 부담↓.
+  - anti-windup: 적분항 clamp + conditional integration(포화 심화 방향이면 적분 동결).
+    FF 가 포화시켜도 적분을 오염 안 시킴(back-calc 대비 FF+PI 안정).
   - 안전: cmd_timeout 안에 ackermann_cmd 가 없으면 전류 0 (또는 brake) 출력.
   - current_sign: VESC 전류부호↔진행방향은 결선/펌웨어 의존 → 벤치 확인 후 플립용.
 """
+import math
+
 import rclpy
 from rclpy.node import Node
 
@@ -41,9 +46,24 @@ class SpeedPidToCurrent(Node):
         self.speed_sign = self.declare_parameter('speed_sign', 1.0).value  # HW실측 2026-06-16: +current=전진 시 state.speed 양수
 
         # ── PID gains ──
-        self.kp = self.declare_parameter('kp', 8.0).value
+        # kp 는 "가속 구간 속도오차 → 전류"의 직접 지렛대.
+        # 캡을 채우려면 대략 kp ≈ current_max / (가속구간 예상오차[m/s]).
+        # 기본 12 는 오차 ~3m/s 에서 ~36A → 벤치서 캡/노이즈 보고 상향.
+        self.kp = self.declare_parameter('kp', 12.0).value
         self.ki = self.declare_parameter('ki', 20.0).value
         self.kd = self.declare_parameter('kd', 0.0).value
+
+        # ── Feedforward (목표속도 기반, planner 가속도 불필요) ──
+        # ① 속도 FF: 그 속도 유지에 필요한 전류를 미리 명령 → 적분이 항력에
+        #    매달릴 필요 없음(정상상태 lag↓). I_ff = vel_ff_gain*v_target + static_ff.
+        #    vel_ff_gain[A/(m/s)], static_ff[A]=정지마찰 breakaway. 벤치서 유지전류↔속도로 캘리브.
+        self.vel_ff_gain = self.declare_parameter('vel_ff_gain', 0.0).value
+        self.static_ff = self.declare_parameter('static_ff', 0.0).value
+        # ③ 가속 FF(opt-in, 기본 0=off): 목표속도의 (필터된) 변화율 → 전류.
+        #    I_ff += accel_ff_gain * d(v_target)/dt. 목표 스텝 스파이크 방지용 LPF(accel_ff_tau[s]).
+        #    accel_ff_gain[A/(m/s^2)]. 스텝응답 전류↔가속 기울기의 역수로 캘리브.
+        self.accel_ff_gain = self.declare_parameter('accel_ff_gain', 0.0).value
+        self.accel_ff_tau = self.declare_parameter('accel_ff_tau', 0.1).value
 
         # ── 전류 출력 한계 [A] (current_min 음수 = 회생제동) ──
         # vesc_driver 캡(bench_real 기본 90/-55)과 동일하게 맞춤 — PID 가 드라이버
@@ -79,6 +99,8 @@ class SpeedPidToCurrent(Node):
         self.meas_speed = 0.0
         self.integral = 0.0
         self.last_meas = 0.0
+        self.last_target = 0.0          # 가속 FF 용 목표속도 미분
+        self.tgt_dot = 0.0              # 필터된 d(v_target)/dt
         self._runaway_latched = False   # 폭주 가드 latch
         self.last_cmd_time = None
         self.have_feedback = False
@@ -98,14 +120,16 @@ class SpeedPidToCurrent(Node):
         # ── 런타임 파라미터 변경 콜백 (GUI 슬라이더 / ros2 param set 으로 라이브 튜닝) ──
         self._live = {'kp', 'ki', 'kd', 'current_max', 'current_min',
                       'current_sign', 'integral_max', 'speed_sign', 'max_abs_speed',
-                      'stop_brake_current'}
+                      'stop_brake_current',
+                      'vel_ff_gain', 'static_ff', 'accel_ff_gain', 'accel_ff_tau'}
         self.add_on_set_parameters_callback(self._on_set_params)
 
         self.get_logger().info(
             f'speed_pid_to_current up: kp={self.kp} ki={self.ki} kd={self.kd} '
             f'I[{self.current_min},{self.current_max}]A gain={self.gain} '
             f'sign(spd={self.speed_sign},cur={self.current_sign}) rate={self.rate}Hz '
-            f'stop_brake={self.stop_brake_current}A')
+            f'stop_brake={self.stop_brake_current}A '
+            f'ff(vel={self.vel_ff_gain},static={self.static_ff},accel={self.accel_ff_gain})')
 
     # ── 런타임 파라미터 변경 → 내부 상태 즉시 반영 ──
     def _on_set_params(self, params):
@@ -113,7 +137,9 @@ class SpeedPidToCurrent(Node):
                 'current_max': 'current_max', 'current_min': 'current_min',
                 'current_sign': 'current_sign', 'integral_max': 'integral_max',
                 'speed_sign': 'speed_sign', 'max_abs_speed': 'max_abs_speed',
-                'stop_brake_current': 'stop_brake_current'}
+                'stop_brake_current': 'stop_brake_current',
+                'vel_ff_gain': 'vel_ff_gain', 'static_ff': 'static_ff',
+                'accel_ff_gain': 'accel_ff_gain', 'accel_ff_tau': 'accel_ff_tau'}
         for p in params:
             if p.name == 'enabled':
                 new_en = bool(p.value)
@@ -152,6 +178,8 @@ class SpeedPidToCurrent(Node):
                      (now - self.last_cmd_time).nanoseconds * 1e-9 > self.cmd_timeout)
         if timed_out or not self.have_feedback:
             self.integral = 0.0
+            self.tgt_dot = 0.0
+            self.last_target = self.target_speed
             self.cur_pub.publish(Float64(data=0.0))
             return
 
@@ -190,21 +218,39 @@ class SpeedPidToCurrent(Node):
 
         error = self.target_speed - self.meas_speed
 
-        # P + I + D(on measurement, setpoint kick 방지)
-        p = self.kp * error
-        self.integral += error * self.dt
-        self.integral = clip(self.integral, -self.integral_max / max(self.ki, 1e-9),
-                             self.integral_max / max(self.ki, 1e-9))
-        i = self.ki * self.integral
+        # D(on measurement, setpoint kick 방지)
         d = -self.kd * (self.meas_speed - self.last_meas) / self.dt
         self.last_meas = self.meas_speed
 
-        raw = self.current_sign * (p + i + d)
+        # ── Feedforward (목표속도 기반) ──
+        # ① 속도 FF: 그 속도 유지 전류 미리. static_ff 는 |목표|≥stop_speed 일 때만
+        #    (정지/감속 목표 0 에 전진 전류가 새는 것 방지).
+        ff = self.vel_ff_gain * self.target_speed
+        if abs(self.target_speed) >= self.stop_speed:
+            ff += math.copysign(self.static_ff, self.target_speed)
+        # ③ 가속 FF(opt-in): 목표속도 변화율(LPF) → 전류.
+        if self.accel_ff_gain != 0.0:
+            raw_dot = (self.target_speed - self.last_target) / self.dt
+            alpha = self.dt / (max(self.accel_ff_tau, 1e-6) + self.dt)
+            self.tgt_dot += alpha * (raw_dot - self.tgt_dot)
+            ff += self.accel_ff_gain * self.tgt_dot
+        self.last_target = self.target_speed
+
+        # 출력(직전 적분값 사용) = current_sign * (P + I + D + FF)
+        p = self.kp * error
+        i = self.ki * self.integral
+        raw = self.current_sign * (p + i + d + ff)
         cur = clip(raw, self.current_min, self.current_max)
 
-        # back-calculation anti-windup: 포화분만큼 적분 되감기
-        if self.ki > 1e-9 and raw != cur:
-            self.integral += (cur - raw) / self.ki * self.current_sign
+        # anti-windup: conditional integration.
+        #  출력이 포화 중이고 적분을 더하면 포화가 깊어지는 방향이면 적분 동결.
+        #  (back-calc 와 달리 FF 가 포화시켜도 적분을 음으로 덤프하지 않음 → FF+PI 안정)
+        push = self.current_sign * error   # error 가 출력을 미는 방향
+        if not ((raw > self.current_max and push > 0) or
+                (raw < self.current_min and push < 0)):
+            self.integral += error * self.dt
+            self.integral = clip(self.integral, -self.integral_max / max(self.ki, 1e-9),
+                                 self.integral_max / max(self.ki, 1e-9))
 
         self.cur_pub.publish(Float64(data=cur))
 
