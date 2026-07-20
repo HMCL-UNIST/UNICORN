@@ -7,6 +7,23 @@
   <let name="config_dir" value="$(find-pkg-share stack_master)/config/CAR" unless="$(var sim)"/>
   <arg name="vehicle_config" default="$(var config_dir)/vehicle_config.yaml"/>
   <arg name="use_estop"      default="false"               description="Use emergency stop (true) or not (false)"/>
+
+  <!-- ===== VESC current-control toggle (vesc_current_control) =====
+       false = 기존 속도(eRPM) 제어: ackermann_to_vesc → /commands/motor/speed.
+       true  = 속도 PID → 모터 전류: speed_pid_to_current → /commands/motor/current
+               (+ 회생 위해 vesc_driver current_min override). gain/servo 는
+               vehicle_config 의 vesc/** 와일드카드에서 자동 수급, PID 전용값만 아래 인자로. -->
+  <arg name="use_current_control" default="false" description="true=속도 PID→전류, false=기존 속도(eRPM)"/>
+  <arg name="cc_kp"                default="3.0"   description="PID P 게인 (실차 튜닝)"/>
+  <arg name="cc_ki"                default="6.0"   description="PID I 게인"/>
+  <arg name="cc_kd"                default="0.0"   description="PID D 게인"/>
+  <arg name="cc_current_max"       default="30.0"  description="PID 출력 전류 상한[A] (레이스시 상향)"/>
+  <arg name="cc_current_min"       default="-20.0" description="PID 출력 전류 하한[A] (음수=회생)"/>
+  <arg name="cc_driver_current_min" default="-55.0" description="vesc_driver current_min override(회생, 펌웨어 -60 안쪽)"/>
+  <arg name="cc_driver_current_max" default="90.0"  description="vesc_driver current_max override"/>
+  <arg name="cc_speed_sign"        default="1.0"   description="속도피드백 부호(이 차 미검증 → 벤치 확인)"/>
+  <arg name="cc_current_sign"      default="1.0"   description="전류부호↔진행방향(결선 의존)"/>
+  <arg name="cc_max_abs_speed"     default="12.0"  description="폭주 가드[m/s] (레이스 최고속 위)"/>
   <!-- virtual_perception (scan_overlay + virtual opponent + static obstacles).
        Defaults ON in sim (preserves prior behavior), OFF on the real car; toggle
        with virtual:=true (e.g. to overlay a virtual opponent onto the real LiDAR). -->
@@ -21,12 +38,43 @@
     <!-- VESC: motor driver + ackermann converter + wheel odometry (/vesc/odom) -->
     <group>
       <push_ros_namespace namespace="vesc"/>
-      <node pkg="vesc_driver" exec="vesc_driver_node" name="vesc_driver_node" output="screen">
+
+      <!-- vesc_driver — 속도모드(기존): vehicle_config 그대로(current_min=0) -->
+      <node pkg="vesc_driver" exec="vesc_driver_node" name="vesc_driver_node" output="screen"
+            unless="$(var use_current_control)">
         <param from="$(var vehicle_config)"/>
       </node>
-      <include file="$(find-pkg-share vesc_ackermann)/launch/ackermann_to_vesc_node.launch.xml">
+      <!-- vesc_driver — 전류모드: 회생 위해 current_min/max override -->
+      <node pkg="vesc_driver" exec="vesc_driver_node" name="vesc_driver_node" output="screen"
+            if="$(var use_current_control)">
+        <param from="$(var vehicle_config)"/>
+        <param name="current_min" value="$(var cc_driver_current_min)"/>
+        <param name="current_max" value="$(var cc_driver_current_max)"/>
+      </node>
+
+      <!-- 변환단 A(기존): ackermann_to_vesc — 속도 → eRPM -->
+      <include file="$(find-pkg-share vesc_ackermann)/launch/ackermann_to_vesc_node.launch.xml"
+               unless="$(var use_current_control)">
         <arg name="vesc_config" value="$(var vehicle_config)"/>
       </include>
+      <!-- 변환단 B: speed_pid_to_current — 속도 PID → 전류 (+servo 변환 흡수).
+           /vesc 네임스페이스 안이라 루트 토픽(commands/motor/current, sensors/core,
+           ackermann_cmd)이 /vesc/... 로 자동 매핑 → remap 불필요.
+           gain(4614)·servo 게인은 vesc/** 와일드카드에서, PID 전용값은 아래에서 override. -->
+      <node pkg="vesc_current_control" exec="speed_pid_to_current" name="speed_pid_to_current_node"
+            output="screen" if="$(var use_current_control)">
+        <param from="$(var vehicle_config)"/>
+        <param name="kp"            value="$(var cc_kp)"/>
+        <param name="ki"            value="$(var cc_ki)"/>
+        <param name="kd"            value="$(var cc_kd)"/>
+        <param name="current_max"   value="$(var cc_current_max)"/>
+        <param name="current_min"   value="$(var cc_current_min)"/>
+        <param name="speed_sign"    value="$(var cc_speed_sign)"/>
+        <param name="current_sign"  value="$(var cc_current_sign)"/>
+        <param name="max_abs_speed" value="$(var cc_max_abs_speed)"/>
+      </node>
+
+      <!-- 휠 오도메트리: 항상 -->
       <include file="$(find-pkg-share vesc_ackermann)/launch/vesc_to_odom_node.launch.xml">
         <arg name="vesc_config" value="$(var vehicle_config)"/>
       </include>
