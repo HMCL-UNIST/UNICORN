@@ -9,10 +9,23 @@ speed_pid_to_current_node:
     speed_to_erpm_offset: 0.0
     speed_sign: 1.0           # 실측(HW 2026-06-16): +current=전진 시 state.speed 양수 → +1.0
 
-    # PID gains — 벤치/실차에서 튜닝 (시작값, 보수적)
-    kp: 8.0
+    # PID gains — 벤치/실차에서 튜닝. kp ≈ current_max/(가속구간 예상오차[m/s]).
+    kp: 12.0
     ki: 20.0
     kd: 0.0
+
+    # === Feedforward (목표속도 기반, planner 가속도 불필요) ===
+    # ① 속도 FF: I_ff = vel_ff_gain*v_target + static_ff. 그 속도 유지전류를
+    #    미리 명령 → 적분 부담↓, 스텝 응답 snappy. 기본 0=off(먼저 PID만 검증 후 켬).
+    #    캘리브: 여러 정속에서 유지전류↔속도 → 기울기=vel_ff_gain[A/(m/s)],
+    #            절편=static_ff[A](정지마찰 breakaway).
+    vel_ff_gain: 0.0
+    static_ff: 0.0
+    # ③ 가속 FF(opt-in): I_ff += accel_ff_gain * LPF(d v_target/dt). 기본 0=off.
+    #    accel_ff_gain[A/(m/s^2)] ≈ 스텝응답 (전류↔가속 기울기)의 역수.
+    #    accel_ff_tau[s]=목표 미분 LPF(스텝 스파이크 완화).
+    accel_ff_gain: 0.0
+    accel_ff_tau: 0.1
 
     # 전류 출력 한계 [A]. current_min 음수 = 회생제동 허용.
     # vesc_driver 캡(bench_real 기본 90/-55)과 동일. 펌웨어 모터±100/회생-60 안쪽.
