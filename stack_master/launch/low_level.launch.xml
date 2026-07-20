@@ -14,7 +14,10 @@
                (+ 회생 위해 vesc_driver current_min override). gain/servo 는
                vehicle_config 의 vesc/** 와일드카드에서 자동 수급, PID 전용값만 아래 인자로. -->
   <arg name="use_current_control" default="false" description="true=속도 PID→전류, false=기존 속도(eRPM)"/>
-  <arg name="cc_kp"                default="3.0"   description="PID P 게인 (실차 튜닝)"/>
+  <arg name="cc_kp"                default="12.0"  description="PID P 게인 (kp≈cc_current_max/가속구간오차; 실차 튜닝)"/>
+  <arg name="cc_vel_ff_gain"       default="0.0"   description="속도 FF[A/(m/s)] — 유지전류↔속도로 캘리브(0=off)"/>
+  <arg name="cc_static_ff"         default="0.0"   description="정지마찰 FF[A] — breakaway(0=off)"/>
+  <arg name="cc_accel_ff_gain"     default="0.0"   description="가속 FF[A/(m/s^2)] — opt-in(0=off)"/>
   <arg name="cc_ki"                default="6.0"   description="PID I 게인"/>
   <arg name="cc_kd"                default="0.0"   description="PID D 게인"/>
   <arg name="cc_current_max"       default="30.0"  description="PID 출력 전류 상한[A] (레이스시 상향)"/>
@@ -67,6 +70,9 @@
         <param name="kp"            value="$(var cc_kp)"/>
         <param name="ki"            value="$(var cc_ki)"/>
         <param name="kd"            value="$(var cc_kd)"/>
+        <param name="vel_ff_gain"   value="$(var cc_vel_ff_gain)"/>
+        <param name="static_ff"     value="$(var cc_static_ff)"/>
+        <param name="accel_ff_gain" value="$(var cc_accel_ff_gain)"/>
         <param name="current_max"   value="$(var cc_current_max)"/>
         <param name="current_min"   value="$(var cc_current_min)"/>
         <param name="speed_sign"    value="$(var cc_speed_sign)"/>
