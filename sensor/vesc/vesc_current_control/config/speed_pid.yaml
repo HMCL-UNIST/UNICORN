@@ -14,16 +14,25 @@ speed_pid_to_current_node:
     ki: 20.0
     kd: 0.0
 
-    # === Feedforward (목표속도 기반, planner 가속도 불필요) ===
-    # ① 속도 FF: I_ff = vel_ff_gain*v_target + static_ff. 그 속도 유지전류를
-    #    미리 명령 → 적분 부담↓, 스텝 응답 snappy. 기본 0=off(먼저 PID만 검증 후 켬).
-    #    캘리브: 여러 정속에서 유지전류↔속도 → 기울기=vel_ff_gain[A/(m/s)],
-    #            절편=static_ff[A](정지마찰 breakaway).
+    # === Feedforward ===
+    # ⚠️ 무결성 감사 2026-08-06 (docs/USAGE.md "Feedforward — 무결성 감사 결과"):
+    #    이전의 캘리브 절차와 성능 주장은 철회됨. 전부 0 유지가 현재 권장.
+    #
+    # ① 속도 FF: I_ff = vel_ff_gain*v_target + static_ff.
+    #    이 차(3.5kg)에서 항력 @5m/s = 0.33A, 관성 @5m/s^2 = 16.8A → 관성이 51배.
+    #    즉 "정속 유지전류↔속도 기울기"로 vel_ff_gain 을 튜닝하는 옛 절차는
+    #    51배 작은 항을 튜닝하는 것이라 실익이 없다 → 절차 폐기.
+    #    켤 경우 ki 를 반드시 낮출 것(FF+ki=20 이중보상 → 오버슈트 25%).
+    #    검증된 조합: vel_ff_gain=(물리값) / ki=2 / kp=30.
     vel_ff_gain: 0.0
     static_ff: 0.0
-    # ③ 가속 FF(opt-in): I_ff += accel_ff_gain * LPF(d v_target/dt). 기본 0=off.
-    #    accel_ff_gain[A/(m/s^2)] ≈ 스텝응답 (전류↔가속 기울기)의 역수.
-    #    accel_ff_tau[s]=목표 미분 LPF(스텝 스파이크 완화).
+    # ③ 가속 FF: ⛔ 사용 금지 (0 고정).
+    #    (v_target - last_target)/dt 는 **지금** 목표의 미분 = 인과적이라
+    #    P 항과 반응 시점이 같고 추가되는 미래 정보가 0. 실측상 오히려 느려짐
+    #    (accFF=0 → 0.72s / 5 → 0.92s / 20 → 1.10s).
+    #    진짜 preview 는 /local_waypoints(vx_mps, ax_mps2) 또는 MPCC 예측
+    #    호라이즌에서 와야 하며, 그 경우 모델기반으로 계산:
+    #      I_ff = (m*a_preview + dragcoeff*v^2) / 1.0414[N/A]   ← 튜닝 불필요
     accel_ff_gain: 0.0
     accel_ff_tau: 0.1
 
