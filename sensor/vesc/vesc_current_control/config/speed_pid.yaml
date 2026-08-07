@@ -1,0 +1,56 @@
+# === Speed PID -> Current ===
+# ackermann_to_vesc (속도→eRPM, VESC 내부 RPM PID) 대체.
+# 목표속도 PID 출력을 전류[A] 로 변환해 /commands/motor/current 로 publish.
+speed_pid_to_current_node:
+  ros__parameters:
+    # 실측속도 환산: m/s = (speed_sign*state.speed - offset)/gain
+    # gain 은 active 설정(vesc_config.yaml)과 동일하게 3423.0 사용
+    speed_to_erpm_gain: 3423.0
+    speed_to_erpm_offset: 0.0
+    speed_sign: 1.0           # 실측(HW 2026-06-16): +current=전진 시 state.speed 양수 → +1.0
+
+    # PID gains — 벤치/실차에서 튜닝. kp ≈ current_max/(가속구간 예상오차[m/s]).
+    kp: 12.0
+    ki: 20.0
+    kd: 0.0
+
+    # === Feedforward ===
+    # ⚠️ 무결성 감사 2026-08-06 (docs/USAGE.md "Feedforward — 무결성 감사 결과"):
+    #    이전의 캘리브 절차와 성능 주장은 철회됨. 전부 0 유지가 현재 권장.
+    #
+    # ① 속도 FF: I_ff = vel_ff_gain*v_target + static_ff.
+    #    이 차(3.5kg)에서 항력 @5m/s = 0.33A, 관성 @5m/s^2 = 16.8A → 관성이 51배.
+    #    즉 "정속 유지전류↔속도 기울기"로 vel_ff_gain 을 튜닝하는 옛 절차는
+    #    51배 작은 항을 튜닝하는 것이라 실익이 없다 → 절차 폐기.
+    #    켤 경우 ki 를 반드시 낮출 것(FF+ki=20 이중보상 → 오버슈트 25%).
+    #    검증된 조합: vel_ff_gain=(물리값) / ki=2 / kp=30.
+    vel_ff_gain: 0.0
+    static_ff: 0.0
+    # ③ 가속 FF: ⛔ 사용 금지 (0 고정).
+    #    (v_target - last_target)/dt 는 **지금** 목표의 미분 = 인과적이라
+    #    P 항과 반응 시점이 같고 추가되는 미래 정보가 0. 실측상 오히려 느려짐
+    #    (accFF=0 → 0.72s / 5 → 0.92s / 20 → 1.10s).
+    #    진짜 preview 는 /local_waypoints(vx_mps, ax_mps2) 또는 MPCC 예측
+    #    호라이즌에서 와야 하며, 그 경우 모델기반으로 계산:
+    #      I_ff = (m*a_preview + dragcoeff*v^2) / 1.0414[N/A]   ← 튜닝 불필요
+    accel_ff_gain: 0.0
+    accel_ff_tau: 0.1
+
+    # 전류 출력 한계 [A]. current_min 음수 = 회생제동 허용.
+    # vesc_driver 캡(bench_real 기본 90/-55)과 동일. 펌웨어 모터±100/회생-60 안쪽.
+    # 첫 테스트는 launch arg 로 낮춰 시작.
+    current_max: 90.0
+    current_min: -55.0
+    current_sign: 1.0         # 전류부호↔진행방향: 벤치 확인 후 필요시 -1.0
+
+    integral_max: 50.0        # 적분 기여 전류 한계 [A] (anti-windup) — current_max 상향에 맞춤
+    control_rate: 100.0       # PID 주기 [Hz]
+    cmd_timeout: 0.3          # ackermann_cmd 끊기면 전류 0 [s]
+    stop_speed_threshold: 0.05
+    max_abs_speed: 12.0       # 폭주 가드[m/s] — 레이스 최고속 위로(부호어긋남만 차단)
+
+    # 조향(servo) — ackermann_to_vesc 와 동일값 (vesc_config.yaml 기준)
+    steering_angle_to_servo_gain: 0.5135
+    steering_angle_to_servo_offset: 0.445
+    servo_max: 0.85
+    servo_min: 0.15

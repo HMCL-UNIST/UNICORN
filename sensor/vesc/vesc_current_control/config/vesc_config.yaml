@@ -1,0 +1,20 @@
+# === VESC Driver (실차 벤치용 — bench_real.launch.py 가 참조) ===
+# 차마다 port / gain / servo 값이 다르므로 실차에서 확인/수정할 것.
+# (이 파일은 vesc_driver_mac 미설치 시에도 bench_real 이 돌도록 repo 에 동봉한 사본)
+# current_min/max 는 bench_real.launch.py 에서 override(회생 위해 min 음수)되므로
+# 여기 값은 fallback 이다.
+vesc_driver_node:
+  ros__parameters:
+    port: "/dev/tty.usbmodem3041"   # ★ 실제 VESC 포트로 수정 (ls /dev/tty.usb* /dev/cu.usb*)
+    brake_max: 200000.0
+    brake_min: -20000.0
+    current_max: 100.0
+    current_min: 0.0
+    duty_cycle_max: 0.0
+    duty_cycle_min: 0.0
+    position_max: 0.0
+    position_min: 0.0
+    servo_max: 0.85
+    servo_min: 0.15
+    speed_max: 23250.0    # ≈ 6.79 m/s
+    speed_min: -23250.0

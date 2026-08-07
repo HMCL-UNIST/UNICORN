@@ -22,6 +22,7 @@
   <arg name="map"        description="Map name (folder in stack_master/maps/)"/>
   <arg name="sim"        default="false" description="Use simulator (true) or real hardware (false)"/>
   <arg name="virtual"    default="$(var sim)" description="Inject a virtual opponent + static obstacles (on by default in sim, off on the real car; e.g. virtual:=true to overlay a virtual opponent onto the real LiDAR)"/>
+  <arg name="use_current_control" default="false" description="VESC 속도 PID→전류 제어(true) vs 기존 속도/eRPM(false). cc_* 튜닝은 low_level.launch.xml 참고"/>
   <arg name="ot_planner" default="lane_change"
        description="Overtake planner to run and listen to: lane_change (lane_change_planner) or sqp (sqp_planner)"/>
   <arg name="control_topic" default="/local_waypoints"
@@ -44,6 +45,7 @@
     <arg name="map"     value="$(var map)"/>
     <arg name="sim"     value="$(var sim)"/>
     <arg name="virtual" value="$(var virtual)"/>
+    <arg name="use_current_control" value="$(var use_current_control)"/>
   </include>
 
   <!-- ===== Perception: LiDAR obstacle detection (C++) + tracking (Python) =====

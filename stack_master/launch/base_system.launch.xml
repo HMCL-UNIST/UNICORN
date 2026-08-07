@@ -18,6 +18,7 @@
   <arg name="sim"          default="false" description="Use simulator (true) or real hardware (false)"/>
   <arg name="localization" default="cartographer"    description="gt (sim) | cartographer | pf (real)"/>
   <arg name="virtual"      default="$(var sim)" description="Inject virtual opponent/obstacles (scan overlay etc.); on by default in sim, off on the real car"/>
+  <arg name="use_current_control" default="false" description="VESC 속도 PID→전류 제어(true) vs 기존 속도/eRPM(false)"/>
 
   <!-- sim -> SIM config folder, real hardware -> CAR config folder -->
   <let name="config_dir" value="$(find-pkg-share stack_master)/config/SIM" if="$(var sim)"/>
@@ -41,6 +42,7 @@
       <arg name="localization"   value="$(var localization)"/>
       <arg name="vehicle_config" value="$(var vehicle_config)"/>
       <arg name="virtual"        value="$(var virtual)"/>
+      <arg name="use_current_control" value="$(var use_current_control)"/>
     </include>
   </group>
 
