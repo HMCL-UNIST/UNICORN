@@ -15,9 +15,9 @@
                vehicle_config 의 vesc/** 와일드카드에서 자동 수급, PID 전용값만 아래 인자로. -->
   <arg name="use_current_control" default="false" description="true=속도 PID→전류, false=기존 속도(eRPM)"/>
   <arg name="cc_kp"                default="12.0"  description="PID P 게인 (kp≈cc_current_max/가속구간오차; 실차 튜닝)"/>
-  <arg name="cc_vel_ff_gain"       default="0.0"   description="속도 FF[A/(m/s)] — 유지전류↔속도로 캘리브(0=off)"/>
+  <arg name="cc_vel_ff_gain"       default="0.0"   description="속도 FF[A/(m/s)] (0=off). 감사2026-08-06: 이 차 항력은 관성의 1/51 → 실익 적음. 켜면 cc_ki 를 낮출 것"/>
   <arg name="cc_static_ff"         default="0.0"   description="정지마찰 FF[A] — breakaway(0=off)"/>
-  <arg name="cc_accel_ff_gain"     default="0.0"   description="가속 FF[A/(m/s^2)] — opt-in(0=off)"/>
+  <arg name="cc_accel_ff_gain"     default="0.0"   description="가속 FF[A/(m/s^2)] — 사용금지, 0 유지. 목표의 인과적 미분이라 preview 없고 실측상 느려짐(docs/USAGE.md)"/>
   <arg name="cc_ki"                default="6.0"   description="PID I 게인"/>
   <arg name="cc_kd"                default="0.0"   description="PID D 게인"/>
   <arg name="cc_current_max"       default="30.0"  description="PID 출력 전류 상한[A] (레이스시 상향)"/>
