@@ -14,8 +14,17 @@ ROS-단 속도 PID → 전류 변환 노드.
     speed_sign 기본 -1.0 → vesc_to_odom.cpp 의 `-state->state.speed` 와 부호 일치.
   - 감속: current_min 을 음수로 두어 음전류(회생제동) 허용 (사용자 결정).
   - PID 는 control_rate[Hz] 타이머로 고정 주기 실행 (cmd/feedback 콜백 rate 와 디커플).
-  - feedforward: 목표속도 기반(planner 가속도 불필요). vel_ff_gain·static_ff(항력/정지마찰
-    상쇄) + accel_ff_gain(목표속도 미분, opt-in) → 스텝 응답 snappy, 적분 부담↓.
+  - feedforward: 목표속도 기반. vel_ff_gain·static_ff(항력/정지마찰 상쇄)
+    + accel_ff_gain(목표속도 미분, opt-in).
+    ⚠️ 무결성 감사(2026-08-06, docs/USAGE.md) 결과 아래 두 가지가 확인됨:
+      · accel_ff_gain 은 **지금 목표의 미분** = 인과적 → P 항과 시점 동일, preview 정보 0.
+        실측상 오히려 느려짐(0.72→1.10s). **켜지 말 것.** 진짜 preview 는
+        /local_waypoints(vx_mps, ax_mps2) 또는 MPCC 예측 호라이즌에서 와야 함.
+      · 이 차(3.5kg)는 항력 @5m/s = 0.33A vs 관성 @5m/s² = 16.8A → **관성이 51배**.
+        vel_ff_gain(항력항) 튜닝은 실익이 거의 없음. 재설계 방향은
+        I_ff = (m*a_preview + dragcoeff*v^2)/1.0414[N/A] 모델기반(튜닝 불필요).
+    FF 의 검증된 이점은 "가속 한계 증가"가 아니라 "같은 노이즈 예산에서 추종 2배"이며,
+    쓰려면 ki 를 낮춰야 함(FF+큰 ki = 이중보상 → 오버슈트 25%).
   - anti-windup: 적분항 clamp + conditional integration(포화 심화 방향이면 적분 동결).
     FF 가 포화시켜도 적분을 오염 안 시킴(back-calc 대비 FF+PI 안정).
   - 안전: cmd_timeout 안에 ackermann_cmd 가 없으면 전류 0 (또는 brake) 출력.
